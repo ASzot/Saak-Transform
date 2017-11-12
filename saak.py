@@ -47,7 +47,7 @@ def show_sample(inv):
 '''
 @ For demo use, only extracts the first 1000 samples
 '''
-def create_numpy_dataset():
+def create_numpy_dataset(num_images):
     datasets = []
     for data in train_loader:
         data_numpy = data[0].numpy()
@@ -57,7 +57,7 @@ def create_numpy_dataset():
     datasets = np.array(datasets)
     datasets=np.expand_dims(datasets,axis=1)
     print 'Numpy dataset shape is {}'.format(datasets.shape)
-    return datasets[:1000]
+    return datasets[:num_images]
 
 
 
@@ -65,23 +65,30 @@ def create_numpy_dataset():
 @ data: flatten patch data: (14*14*60000,1,2,2)
 @ return: augmented anchors
 '''
-def PCA_and_augment(data_in):
+def PCA_and_augment(data_in, energy_thresh=1.0):
     # data reshape
     data=np.reshape(data_in,(data_in.shape[0],-1))
     print 'PCA_and_augment: {}'.format(data.shape)
-    # mean removal
-    mean = np.mean(data, axis=0)
-    datas_mean_remov = data - mean
-    print 'PCA_and_augment meanremove shape: {}'.format(datas_mean_remov.shape)
+    # patch mean removal
+    mean = np.mean(data, axis=1, keepdims=True)
+    data_mean_remov = data - mean
+    print 'PCA_and_augment meanremove shape: {}'.format(data_mean_remov.shape)
 
     # PCA, retain all components
-    pca=PCA()
-    pca.fit(datas_mean_remov)
+    if energy_thresh == 1.0:
+        pca = PCA(svd_solver='full')
+    else:
+        pca=PCA(n_components=energy_thresh, svd_solver='full')
+    ## if 0 < n_components < 1 and svd_solver == 'full'
+    # select the number of components such that the amount of variance that needs to be explained
+    # is greater than the percentage specified by n_components
+
+    pca.fit(data_mean_remov)
     comps=pca.components_
 
-    # augment, DC component doesn't
-    comps_aug=[vec*(-1) for vec in comps[1:]]
-    comps_complete=np.vstack((comps,comps_aug))
+    # augment
+    comps_neg=[vec*(-1) for vec in comps[:-1]] #the last comp is dc anchor vec, don't augment
+    comps_complete=np.vstack((comps, comps_neg))
     print 'PCA_and_augment comps_complete shape: {}'.format(comps_complete.shape)
     return comps_complete
 
@@ -158,7 +165,7 @@ def conv_and_relu(filters,datasets,stride=2):
 @ One-stage Saak transform
 @ input: datasets [60000,channel, size,size]
 '''
-def one_stage_saak_trans(datasets=None,depth=0):
+def one_stage_saak_trans(datasets=None,depth=0, energy_thresh=1.0):
 
 
     # load dataset, (60000,1,32,32)
@@ -170,7 +177,7 @@ def one_stage_saak_trans(datasets=None,depth=0):
     data_flatten=fit_pca_shape(datasets,depth)
 
     # augmented components
-    comps_complete=PCA_and_augment(data_flatten)
+    comps_complete=PCA_and_augment(data_flatten, energy_thresh=energy_thresh)
     print 'one_stage_saak_trans: comps_complete: {}'.format(comps_complete.shape)
 
     # get filter and datas, (7,1,2,2) (60000,1,32,32)
@@ -189,28 +196,25 @@ def one_stage_saak_trans(datasets=None,depth=0):
 '''
 @ Multi-stage Saak transform
 '''
-def multi_stage_saak_trans():
+def multi_stage_saak_trans(data, energy_thresh=1.0):
     filters = []
     outputs = []
-
-    data=create_numpy_dataset()
-    dataset=data
-    num=0
+    num_stages=0
     img_len=data.shape[-1]
     while(img_len>=2):
-        num+=1
+        num_stages+=1
         img_len/=2
 
 
-    for i in range(num):
+    for i in range(num_stages):
         print '{} stage of saak transform: '.format(i)
-        data,filt,output=one_stage_saak_trans(data,depth=i)
+        data,filt,output=one_stage_saak_trans(data,depth=i, energy_thresh=energy_thresh)
         filters.append(filt)
         outputs.append(output)
         print ''
 
 
-    return dataset,filters,outputs
+    return filters,outputs
 
 '''
 @ Reconstruction from the second last stage
@@ -226,11 +230,43 @@ def toy_recon(outputs,filters):
 
     return data
 
+'''
+P/S conversion to get useful feature
+'''
+def p_s_conversion(position_feature):
+    n, c, h, w = position_feature.shape
+    ac_dim = (c - 1)/2
+    dc_feat = position_feature[:, -1:, :, :]
+    signed_ac_feat = position_feature[:, :ac_dim, :, :] - position_feature[:, ac_dim:-1, :, :]
+    signed_feat = np.concatenate((dc_feat, signed_ac_feat), axis=1)
+    return signed_feat
+
+'''
+flatten and concat saak features from all stages (stage 1-5)
+input: list of output cuboids of multi-stage saak transform
+'''
+def get_final_feature(outputs):
+    final_feat = None
+    for output in outputs:
+        npy = output.data.numpy()
+        signed_output = p_s_conversion(npy)
+        flattened_feat = np.reshape(signed_output, [signed_output.shape[0], -1])
+        if final_feat is None:
+            final_feat = flattened_feat
+        else:
+            final_feat = np.concatenate((final_feat, flattened_feat), axis=1)
+    return final_feat
+
 
 if __name__=='__main__':
-    dataset,filters,outputs=multi_stage_saak_trans()
-    data=toy_recon(outputs,filters)
-    show_sample(data)
+    # Testing
+    num_images = 1000
+    data = create_numpy_dataset(num_images)
+    filters,outputs=multi_stage_saak_trans(data, energy_thresh=0.97)
+    final_feat_dim = sum([((output.data.shape[1]-1)/2+1)*output.data.shape[2]*output.data.shape[3] for output in outputs])
+    print 'final feature dimension is {}'.format(final_feat_dim)
+    final_feat = get_final_feature(outputs)
+    assert final_feat.shape[1] == final_feat_dim
 
 
 
