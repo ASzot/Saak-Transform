@@ -3,6 +3,8 @@ import os
 import torch.utils.data as data
 import torch
 from PIL import Image
+import h5py
+import numpy as np
 
 
 class MNIST(data.Dataset):
@@ -103,6 +105,25 @@ class MNIST(data.Dataset):
         print('Done!')
 
 
-if __name__=='__main__':
-    mnist_train=MNIST(train=True,process=False)
-    print len(mnist_train)
+class DatasetFromHdf5(data.Dataset):
+    
+    def __init__(self, hdf5_path):
+        super(DatasetFromHdf5, self).__init__()
+        self.hdf5_file = h5py.File(hdf5_path)
+        self.img = np.array(self.hdf5_file.get("img"), np.uint8)
+        self.labels = np.array(self.hdf5_file.get("labels"), np.uint8)
+        if self.hdf5_file.get("mean") != None:
+            self.mean = np.array(self.hdf5_file.get("mean"), np.float)
+        else:
+            self.mean = np.zeros((3, 32, 32), np.float)
+
+
+    def __getitem__(self,index):
+        return self.img[index,:,:,:], self.labels[index]
+        #return torch.from_numpy(self.img[index,:,:,:]).float(), torch.from_numpy(self.labels[index,:,:,:]).float()
+
+    def __len__(self):
+        return self.img.shape[0]
+
+    def get_mean(self):
+        return self.mean

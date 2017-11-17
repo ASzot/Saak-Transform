@@ -11,28 +11,37 @@ import argparse
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
-from data.datasets import MNIST
+from data.datasets import DatasetFromHdf5
 import torch.utils.data as data_utils
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 from torch.autograd import Variable
 from itertools import product
+from cluster_patch import k_mean_clustering
 
 # argument parsing
 print torch.__version__
 batch_size=1
 test_batch_size=1
 kwargs={}
-train_loader=data_utils.DataLoader(MNIST(root='./data',train=True,process=False,transform=transforms.Compose([
-    transforms.Scale((32,32)),
-    transforms.ToTensor(),
-])),batch_size=batch_size,shuffle=True,**kwargs)
+# hdf5 file is generated using data/create_hdf5.py
+# using create_hdf5.py, simply run: python create_hdf5.py
+train_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/train_CS_DS4.hdf5'
+val_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/val_CS_DS4.hdf5'
+K = 34
+NUM_VIS = 20
 
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
-test_loader=data_utils.DataLoader(MNIST(root='./data',train=False,process=False,transform=transforms.Compose([
-    transforms.Scale((32,32)),
-    transforms.ToTensor(),
-])),batch_size=test_batch_size,shuffle=True,**kwargs)
+train_set = DatasetFromHdf5(train_path)
+val_set = DatasetFromHdf5(val_path)
+
+train_loader = data_utils.DataLoader(dataset=train_set, num_workers=8, 
+                                            batch_size=batch_size, shuffle=True, **kwargs)
+
+validation_data_loader = data_utils.DataLoader(dataset=val_set, num_workers=8, 
+                                            batch_size=batch_size, shuffle=True, **kwargs)
 
 
 
@@ -49,13 +58,18 @@ def show_sample(inv):
 '''
 def create_numpy_dataset(num_images):
     datasets = []
+    count = 0
     for data in train_loader:
+        if count == num_images:
+            break
         data_numpy = data[0].numpy()
         data_numpy = np.squeeze(data_numpy)
         datasets.append(data_numpy)
+        count = count + 1
+        print(count)
 
     datasets = np.array(datasets)
-    datasets=np.expand_dims(datasets,axis=1)
+    #datasets=np.expand_dims(datasets,axis=1)
     print 'Numpy dataset shape is {}'.format(datasets.shape)
     return datasets[:num_images]
 
@@ -109,8 +123,6 @@ def fit_pca_shape(datasets,depth):
     data_lattice=[datasets[:,:,i:j,k:l] for ((i,j),(k,l)) in product(zip(idx1,idx2),zip(idx1,idx2))]
     data_lattice=np.array(data_lattice)
     print 'fit_pca_shape: data_lattice.shape: {}'.format(data_lattice.shape)
-
-    #shape reshape
     data=np.reshape(data_lattice,(data_lattice.shape[0]*data_lattice.shape[1],data_lattice.shape[2],2,2))
     print 'fit_pca_shape: reshape: {}'.format(data.shape)
     return data
@@ -163,7 +175,7 @@ def conv_and_relu(filters,datasets,stride=2):
 
 '''
 @ One-stage Saak transform
-@ input: datasets [60000,channel, size,size]
+@ input: datasets [60000, channel, size,size]
 '''
 def one_stage_saak_trans(datasets=None,depth=0, energy_thresh=1.0):
 
@@ -200,21 +212,25 @@ def multi_stage_saak_trans(data, energy_thresh=1.0):
     filters = []
     outputs = []
     num_stages=0
-    img_len=data.shape[-1]
+    img_len=data.shape[0]
+    
     while(img_len>=2):
+        if num_stages >= 5:
+            break
         num_stages+=1
         img_len/=2
 
+    print(num_stages)
 
     for i in range(num_stages):
         print '{} stage of saak transform: '.format(i)
-        data,filt,output=one_stage_saak_trans(data,depth=i, energy_thresh=energy_thresh)
+        data,filt,output=one_stage_saak_trans(data, depth=i, energy_thresh=energy_thresh)
         filters.append(filt)
         outputs.append(output)
         print ''
 
 
-    return filters,outputs
+    return filters, outputs
 
 '''
 @ Reconstruction from the second last stage
@@ -260,13 +276,16 @@ def get_final_feature(outputs):
 
 if __name__=='__main__':
     # Testing
-    num_images = 1000
+    num_images = 10000
     data = create_numpy_dataset(num_images)
-    filters,outputs=multi_stage_saak_trans(data, energy_thresh=0.97)
+    filters, outputs = multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum([((output.data.shape[1]-1)/2+1)*output.data.shape[2]*output.data.shape[3] for output in outputs])
     print 'final feature dimension is {}'.format(final_feat_dim)
     final_feat = get_final_feature(outputs)
     assert final_feat.shape[1] == final_feat_dim
+    print(final_feat.shape)
+    k_mean_clustering(data = data, feature = final_feat, K = K, num_centroids_to_visualize = NUM_VIS)
+
 
 
 
