@@ -28,8 +28,9 @@ kwargs={}
 # using create_hdf5.py, simply run: python create_hdf5.py
 train_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/train_CS_DS4.hdf5'
 val_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/val_CS_DS4.hdf5'
-K = 34
-NUM_VIS = 20
+K = 3
+NUM_VIS = 15
+NUM_IMAGES = 1000
 
 import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -276,7 +277,7 @@ def get_final_feature(outputs):
 
 if __name__=='__main__':
     # Testing
-    num_images = 10000
+    num_images = NUM_IMAGES
     data = create_numpy_dataset(num_images)
     filters, outputs = multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum([((output.data.shape[1]-1)/2+1)*output.data.shape[2]*output.data.shape[3] for output in outputs])

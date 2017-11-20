@@ -14,8 +14,9 @@ cluster_path = '/home/chen/dataset_DA/SAAK_test/Cluster'
 centroid_path = '/home/chen/dataset_DA/SAAK_test/Centroid'
 
 def k_mean_clustering(data = None, feature = None, K = 34, num_centroids_to_visualize = 20):
-	
-	kmeans = KMeans(n_clusters=K, random_state=0).fit(feature)
+
+	normlized_feature = feature/np.expand_dims(np.var(feature, 1), 1)
+	kmeans = KMeans(n_clusters=K, random_state=0).fit(normlized_feature)
 	pred_label = kmeans.labels_
 	centroid = kmeans.cluster_centers_
 	
