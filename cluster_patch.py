@@ -15,7 +15,7 @@ centroid_path = '/home/chen/dataset_DA/SAAK_test/Centroid'
 
 def k_mean_clustering(data = None, feature = None, K = 34, num_centroids_to_visualize = 20):
 
-	normlized_feature = feature/np.expand_dims(np.var(feature, 1), 1)
+	normlized_feature = feature/np.expand_dims(np.sqrt(np.var(feature, 1)), 1)
 	kmeans = KMeans(n_clusters=K, random_state=0).fit(normlized_feature)
 	pred_label = kmeans.labels_
 	centroid = kmeans.cluster_centers_
@@ -26,8 +26,8 @@ def k_mean_clustering(data = None, feature = None, K = 34, num_centroids_to_visu
 			min_f = np.zeros(num_centroids_to_visualize, np.uint8)
 			min_distance =np.zeros(num_centroids_to_visualize, np.float32)
 			
-			for f in range(feature.shape[0]):
-				curr_distance = np.linalg.norm(feature[f, :] - centroid[i, :])
+			for f in range(normlized_feature.shape[0]):
+				curr_distance = np.linalg.norm(normlized_feature[f, :] - centroid[i, :])
 				if f < num_centroids_to_visualize:
 					min_distance[f] = curr_distance
 					min_f[f] = f
