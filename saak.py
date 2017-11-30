@@ -11,38 +11,21 @@ import argparse
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
-from data.datasets import DatasetFromHdf5
+from data.datasets import MNIST
 import torch.utils.data as data_utils
 from sklearn.decomposition import PCA
 import torch.nn.functional as F
 from torch.autograd import Variable
 from itertools import product
-from cluster_patch import k_mean_clustering
+import math
 
 # argument parsing
 print torch.__version__
+
 batch_size=1
 test_batch_size=1
 kwargs={}
-# hdf5 file is generated using data/create_hdf5.py
-# using create_hdf5.py, simply run: python create_hdf5.py
-train_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/train_CS_DS4.hdf5'
-val_path = '/home/chen/dataset_DA/Cityscapes/saak_patches/images/hdf5/val_CS_DS4.hdf5'
-K = 3
-NUM_VIS = 15
-NUM_IMAGES = 1000
 
-import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
-
-train_set = DatasetFromHdf5(train_path)
-val_set = DatasetFromHdf5(val_path)
-
-train_loader = data_utils.DataLoader(dataset=train_set, num_workers=8, 
-                                            batch_size=batch_size, shuffle=True, **kwargs)
-
-validation_data_loader = data_utils.DataLoader(dataset=val_set, num_workers=8, 
-                                            batch_size=batch_size, shuffle=True, **kwargs)
 
 
 
@@ -57,22 +40,18 @@ def show_sample(inv):
 '''
 @ For demo use, only extracts the first 1000 samples
 '''
-def create_numpy_dataset(num_images):
+def create_numpy_dataset(num_images, train_loader):
     datasets = []
-    count = 0
     for data in train_loader:
-        if count == num_images:
-            break
         data_numpy = data[0].numpy()
         data_numpy = np.squeeze(data_numpy)
         datasets.append(data_numpy)
-        count = count + 1
-        print(count)
 
     datasets = np.array(datasets)
-    #datasets=np.expand_dims(datasets,axis=1)
+    if len(datasets.shape)==3:
+        datasets = np.expand_dims(datasets, axis=1)
     print 'Numpy dataset shape is {}'.format(datasets.shape)
-    return datasets[:num_images]
+    return datasets[:1000]
 
 
 
@@ -212,16 +191,13 @@ def one_stage_saak_trans(datasets=None,depth=0, energy_thresh=1.0):
 def multi_stage_saak_trans(data, energy_thresh=1.0):
     filters = []
     outputs = []
-    num_stages=0
-    img_len=data.shape[0]
-    
-    while(img_len>=2):
-        if num_stages >= 5:
-            break
-        num_stages+=1
-        img_len/=2
+    spatial_extent=data.shape[-1]
+    num_stages = int(math.log(spatial_extent, 2))
 
-    print(num_stages)
+    # num_stages=0
+    # while(spatial_extent>=2):
+    #     num_stages+=1
+    #     spatial_extent/=2
 
     for i in range(num_stages):
         print '{} stage of saak transform: '.format(i)
@@ -277,15 +253,25 @@ def get_final_feature(outputs):
 
 if __name__=='__main__':
     # Testing
-    num_images = NUM_IMAGES
-    data = create_numpy_dataset(num_images)
+    batch_size = 1
+    test_batch_size = 1
+    kwargs = {}
+    train_loader = data_utils.DataLoader(MNIST(root='./data', train=True, process=False, transform=transforms.Compose([
+        transforms.Scale((32, 32)),
+        transforms.ToTensor(),
+    ])), batch_size=batch_size, shuffle=True, **kwargs)
+
+    test_loader = data_utils.DataLoader(MNIST(root='./data', train=False, process=False, transform=transforms.Compose([
+        transforms.Scale((32, 32)),
+        transforms.ToTensor(),
+    ])), batch_size=test_batch_size, shuffle=True, **kwargs)
+    num_images = 1000
+    data = create_numpy_dataset(num_images, train_loader)
     filters, outputs = multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum([((output.data.shape[1]-1)/2+1)*output.data.shape[2]*output.data.shape[3] for output in outputs])
     print 'final feature dimension is {}'.format(final_feat_dim)
     final_feat = get_final_feature(outputs)
     assert final_feat.shape[1] == final_feat_dim
-    print(final_feat.shape)
-    k_mean_clustering(data = data, feature = final_feat, K = K, num_centroids_to_visualize = NUM_VIS)
 
 
 

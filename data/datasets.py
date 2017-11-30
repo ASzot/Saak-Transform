@@ -127,3 +127,7 @@ class DatasetFromHdf5(data.Dataset):
 
     def get_mean(self):
         return self.mean
+
+if __name__=='__main__':
+    mnist_train=MNIST(train=True,process=False)
+    print len(mnist_train)
