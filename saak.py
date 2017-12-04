@@ -48,7 +48,7 @@ def create_numpy_dataset(num_images, train_loader):
         datasets.append(data_numpy)
 
     datasets = np.array(datasets)
-    if len(datasets.shape)==3:
+    if len(datasets.shape)==3: # the input image is grayscale image
         datasets = np.expand_dims(datasets, axis=1)
     print 'Numpy dataset shape is {}'.format(datasets.shape)
     return datasets[:1000]
@@ -81,8 +81,9 @@ def PCA_and_augment(data_in, energy_thresh=1.0):
     comps=pca.components_
 
     # augment
-    comps_neg=[vec*(-1) for vec in comps[:-1]] #the last comp is dc anchor vec, don't augment
-    comps_complete=np.vstack((comps, comps_neg))
+    ac_comps = comps[:-1]
+    comps_neg=[vec*(-1) for vec in ac_comps] #the last comp is dc anchor vec, don't augment
+    comps_complete=np.vstack((ac_comps, comps_neg))
     print 'PCA_and_augment comps_complete shape: {}'.format(comps_complete.shape)
     return comps_complete
 
@@ -115,7 +116,7 @@ def fit_pca_shape(datasets,depth):
 @ output_datas: [60000*num_patch*num_patch,channel,2,2]
 
 '''
-def ret_filt_patches(aug_anchors,input_channels):
+def ret_filt_patches(aug_anchors):
     shape=aug_anchors.shape[1]/4
     num=aug_anchors.shape[0]
     filt=np.reshape(aug_anchors,(num,shape,4))
@@ -151,6 +152,20 @@ def conv_and_relu(filters,datasets,stride=2):
 
     return relu_output,filt
 
+def conv(filters,datasets,stride=2):
+    # torch data change
+    filters_t=torch.from_numpy(filters)
+    datasets_t=torch.from_numpy(datasets)
+
+    # Variables
+    filt=Variable(filters_t).type(torch.FloatTensor)
+    data=Variable(datasets_t).type(torch.FloatTensor)
+
+    # Convolution
+    output=F.conv2d(data,filt,stride=stride)
+
+    return output
+
 
 
 '''
@@ -172,14 +187,26 @@ def one_stage_saak_trans(datasets=None,depth=0, energy_thresh=1.0):
     comps_complete=PCA_and_augment(data_flatten, energy_thresh=energy_thresh)
     print 'one_stage_saak_trans: comps_complete: {}'.format(comps_complete.shape)
 
-    # get filter and datas, (7,1,2,2) (60000,1,32,32)
-    filters=ret_filt_patches(comps_complete,input_channels)
+    # get filter and datas, (6,1,2,2) (60000,1,32,32)
+    filters=ret_filt_patches(comps_complete)
     print 'one_stage_saak_trans: filters: {}'.format(filters.shape)
 
-    # output (60000,7,14,14)
+    #subtract patch mean
+    N, C, H, W = datasets.shape
+    mean_filter = 1.0 / (C* 2 * 2) * np.ones((C, C, 2,2), dtype=np.float32)
+    patch_mean = conv(mean_filter, datasets, stride=2)
+    patch_mean_up = F.upsample(patch_mean, scale_factor=2, mode='nearest')
+
+    datasets-=patch_mean_up.data.numpy()
+
+    # output (60000,6,14,14)
     relu_output,filt=conv_and_relu(filters,datasets,stride=2)
 
     data=relu_output.data.numpy()
+
+    #add dc back
+    data = np.concatenate((data, patch_mean.data.numpy()),axis=1)
+
     print 'one_stage_saak_trans: output: {}'.format(data.shape)
     return data,filt,relu_output
 
@@ -228,9 +255,9 @@ P/S conversion to get useful feature
 '''
 def p_s_conversion(position_feature):
     n, c, h, w = position_feature.shape
-    ac_dim = (c - 1)/2
+    dc_index = (c - 1)/2
     dc_feat = position_feature[:, -1:, :, :]
-    signed_ac_feat = position_feature[:, :ac_dim, :, :] - position_feature[:, ac_dim:-1, :, :]
+    signed_ac_feat = position_feature[:, :dc_index, :, :] - position_feature[:, dc_index+1:-1, :, :]
     signed_feat = np.concatenate((dc_feat, signed_ac_feat), axis=1)
     return signed_feat
 
