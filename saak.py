@@ -42,16 +42,19 @@ def show_sample(inv):
 '''
 def create_numpy_dataset(num_images, train_loader):
     datasets = []
-    for data in train_loader:
+    if num_images is None:
+        num_images = len(train_loader)
+    for i, data in enumerate(train_loader):
         data_numpy = data[0].numpy()
         data_numpy = np.squeeze(data_numpy)
         datasets.append(data_numpy)
-
+        if i==(num_images-1):
+            break
     datasets = np.array(datasets)
     if len(datasets.shape)==3: # the input image is grayscale image
         datasets = np.expand_dims(datasets, axis=1)
     print 'Numpy dataset shape is {}'.format(datasets.shape)
-    return datasets[:1000]
+    return datasets
 
 
 
@@ -197,18 +200,18 @@ def one_stage_saak_trans(datasets=None,depth=0, energy_thresh=1.0):
     patch_mean = conv(mean_filter, datasets, stride=2)
     patch_mean_up = F.upsample(patch_mean, scale_factor=2, mode='nearest')
 
-    datasets-=patch_mean_up.data.numpy()
+    normalized_data = datasets - patch_mean_up.data.numpy()
 
     # output (60000,6,14,14)
-    relu_output,filt=conv_and_relu(filters,datasets,stride=2)
+    relu_output,filt = conv_and_relu(filters,normalized_data,stride=2)
 
-    data=relu_output.data.numpy()
+    ac_feature = relu_output.data.numpy()
 
     #add dc back
-    data = np.concatenate((data, patch_mean.data.numpy()),axis=1)
+    feature = np.concatenate((ac_feature, patch_mean.data.numpy()),axis=1)
 
-    print 'one_stage_saak_trans: output: {}'.format(data.shape)
-    return data,filt,relu_output
+    print 'one_stage_saak_trans: output: {}'.format(feature.shape)
+    return feature,filt,relu_output
 
 
 
