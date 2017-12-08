@@ -111,7 +111,7 @@ class DatasetFromHdf5(data.Dataset):
         super(DatasetFromHdf5, self).__init__()
         self.hdf5_file = h5py.File(hdf5_path)
         self.img = np.array(self.hdf5_file.get("img"), np.uint8)
-        self.labels = np.array(self.hdf5_file.get("labels"), np.uint8)
+        self.label = np.array(self.hdf5_file.get("label"), np.uint8)
         if self.hdf5_file.get("mean") != None:
             self.mean = np.array(self.hdf5_file.get("mean"), np.float)
         else:
@@ -119,7 +119,7 @@ class DatasetFromHdf5(data.Dataset):
 
 
     def __getitem__(self,index):
-        return self.img[index,:,:,:], self.labels[index]
+        return self.img[index,:,:,:], self.label[index]
         #return torch.from_numpy(self.img[index,:,:,:]).float(), torch.from_numpy(self.labels[index,:,:,:]).float()
 
     def __len__(self):
