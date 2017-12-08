@@ -84,8 +84,11 @@ def PCA_and_augment(data_in, energy_thresh=1.0):
     comps=pca.components_
 
     # augment
-    ac_comps = comps[:-1]
-    comps_neg=[vec*(-1) for vec in ac_comps] #the last comp is dc anchor vec, don't augment
+    if energy_thresh == 1.0:
+        ac_comps = comps[:-1] #the last comp is dc anchor vec, don't augment
+    else:
+        ac_comps = comps
+    comps_neg=[vec*(-1) for vec in ac_comps]
     comps_complete=np.vstack((ac_comps, comps_neg))
     print 'PCA_and_augment comps_complete shape: {}'.format(comps_complete.shape)
     return comps_complete
