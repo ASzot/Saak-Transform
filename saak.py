@@ -65,28 +65,30 @@ def create_numpy_dataset(num_images, train_loader):
 def PCA_and_augment(data_in, energy_thresh=1.0):
     # data reshape
     data=np.reshape(data_in,(data_in.shape[0],-1))
-    print 'PCA_and_augment: {}'.format(data.shape)
+    print 'PCA_and_augment data shape:{}'.format(data.shape)
     # patch mean removal
     mean = np.mean(data, axis=1, keepdims=True)
     data_mean_remov = data - mean
-    print 'PCA_and_augment meanremove shape: {}'.format(data_mean_remov.shape)
 
     # PCA, retain all components
     if energy_thresh == 1.0:
         pca = PCA(svd_solver='full')
     else:
-        pca=PCA(n_components=energy_thresh, svd_solver='full')
+        pca = PCA(n_components=energy_thresh, svd_solver='full')
     ## if 0 < n_components < 1 and svd_solver == 'full'
     # select the number of components such that the amount of variance that needs to be explained
     # is greater than the percentage specified by n_components
 
     pca.fit(data_mean_remov)
-    comps=pca.components_
+    # idx = pca.explained_variance_ratio_> 0.03
+    # comps=pca.components_[idx,:]
+    comps = pca.components_
     feat_mean = pca.mean_
 
     # augment
-    if energy_thresh == 1.0:
-        ac_comps = comps[:-1] #the last comp is dc anchor vec, don't augment
+    if comps.shape[0] == data.shape[1]:
+        print 'all comps are kept'
+        ac_comps = comps[:-1] #if all comps are kept, the last comp is dc anchor vec, don't augment
     else:
         ac_comps = comps
     comps_neg=[vec*(-1) for vec in ac_comps]
@@ -159,7 +161,7 @@ def conv_and_relu(filters, datasets, stride=2):
     # Relu
     relu_output=F.relu(output)
 
-    return relu_output,filt
+    return relu_output
 
 def conv(filters,datasets,stride=2):
     # torch data change
@@ -181,7 +183,7 @@ def conv(filters,datasets,stride=2):
 @ One-stage Saak transform
 @ input: datasets [60000, channel, size,size]
 '''
-def one_stage_saak_trans(datasets=None, depth=0, energy_thresh=1.0):
+def one_stage_saak_trans(datasets=None, stage=0, energy_thresh=1.0):
 
 
     # load dataset, (60000,1,32,32)
@@ -190,7 +192,7 @@ def one_stage_saak_trans(datasets=None, depth=0, energy_thresh=1.0):
     input_channels=datasets.shape[1]
 
     # change data shape, (14*60000,4)
-    data_flatten=fit_pca_shape(datasets,depth)
+    data_flatten=fit_pca_shape(datasets,stage)
 
     # augmented components
     comps_complete, feat_mean = PCA_and_augment(data_flatten, energy_thresh=energy_thresh)
@@ -213,15 +215,52 @@ def one_stage_saak_trans(datasets=None, depth=0, energy_thresh=1.0):
     normalized_data -= np.expand_dims(tiled_mean, axis=0)
 
     # output (60000,6,14,14)
-    relu_output,filt = conv_and_relu(filters,normalized_data,stride=2)
+    relu_output = conv_and_relu(filters,normalized_data,stride=2)
 
     ac_feature = relu_output.data.numpy()
 
     #add dc back
-    feature = np.concatenate((ac_feature, patch_mean.data.numpy()),axis=1)
+    dc = patch_mean.data.numpy() * np.sqrt(C* 2 * 2)
+    output = np.concatenate((ac_feature, dc),axis=1)
 
-    print 'one_stage_saak_trans: output: {}'.format(feature.shape)
-    return feature,filt,threeD_mean,relu_output
+    print 'one_stage_saak_trans: output: {}'.format(output.shape)
+    return filters,threeD_mean,output
+
+'''
+@ Testing One-stage Saak transform
+@ input: datasets [60000, channel, size,size]
+'''
+
+def test_one_stage_saak_trans(test_data, feat_mean, filters):
+
+
+    # load dataset, (60000,1,32,32)
+    # input_channel: 1->7
+    print 'one_stage_saak_trans: test_data.shape {}'.format(test_data.shape)
+
+    #subtract patch mean
+    N, C, H, W = test_data.shape
+    mean_filter = 1.0 / (C* 2 * 2) * np.ones((1, C, 2, 2), dtype=np.float32)
+    patch_mean = conv(mean_filter, test_data, stride=2)
+    patch_mean_up = F.upsample(patch_mean, scale_factor=2, mode='nearest')
+
+    normalized_data = test_data - patch_mean_up.data.numpy()
+
+    #subtract feature mean before pca transform
+    tiled_mean = np.tile(feat_mean, (1, H/2, W/2))
+    normalized_data -= np.expand_dims(tiled_mean, axis=0)
+
+    # output (60000,6,14,14)
+    relu_output = conv_and_relu(filters,normalized_data,stride=2)
+
+    ac_feature = relu_output.data.numpy()
+
+    #add dc back
+    dc = patch_mean.data.numpy() * np.sqrt(C* 2 * 2)
+    output = np.concatenate((ac_feature, dc),axis=1)
+
+    print 'one_stage_saak_trans: output: {}'.format(output.shape)
+    return output
 
 
 
@@ -242,14 +281,24 @@ def multi_stage_saak_trans(data, energy_thresh=1.0):
 
     for i in range(num_stages):
         print '{} stage of saak transform: '.format(i)
-        data,filt,mean,output=one_stage_saak_trans(data, depth=i, energy_thresh=energy_thresh)
+        filt,mean,data=one_stage_saak_trans(data, stage=i, energy_thresh=energy_thresh)
         filters.append(filt)
-        outputs.append(output)
+        outputs.append(data)
         means.append(mean)
         print ''
 
 
     return filters, means, outputs
+
+def test_multi_stage_saak_trans(test_data, feat_means, filters):
+    num_stages = len(filters)
+    outputs = []
+    for i in range(num_stages):
+        print '{} stage of saak transform: '.format(i)
+        test_data=test_one_stage_saak_trans(test_data, feat_means[i], filters[i])
+        outputs.append(test_data)
+        print ''
+    return outputs
 
 '''
 @ Reconstruction from the second last stage
@@ -270,9 +319,8 @@ P/S conversion to get useful feature
 '''
 def p_s_conversion(position_feature):
     n, c, h, w = position_feature.shape
-    dc_index = (c - 1)/2
-    dc_feat = position_feature[:, -1:, :, :]
-    signed_ac_feat = position_feature[:, :dc_index, :, :] - position_feature[:, dc_index+1:-1, :, :]
+    dc_feat = np.expand_dims(position_feature[:, -1, :, :], axis=1)
+    signed_ac_feat = position_feature[:, :c/2, :, :] - position_feature[:, c/2:-1, :, :]
     signed_feat = np.concatenate((dc_feat, signed_ac_feat), axis=1)
     return signed_feat
 
@@ -281,16 +329,15 @@ flatten and concat saak features from all stages (stage 1-5)
 input: list of output cuboids of multi-stage saak transform
 '''
 def get_final_feature(outputs):
-    final_feat = None
+    final_feature = None
     for output in outputs:
-        npy = output.data.numpy()
-        signed_output = p_s_conversion(npy)
+        signed_output = p_s_conversion(output)
         flattened_feat = np.reshape(signed_output, [signed_output.shape[0], -1])
-        if final_feat is None:
-            final_feat = flattened_feat
+        if final_feature is None:
+            final_feature = flattened_feat
         else:
-            final_feat = np.concatenate((final_feat, flattened_feat), axis=1)
-    return final_feat
+            final_feature = np.concatenate((final_feature, flattened_feat), axis=1)
+    return final_feature
 
 
 if __name__=='__main__':
@@ -299,21 +346,31 @@ if __name__=='__main__':
     test_batch_size = 1
     kwargs = {}
     train_loader = data_utils.DataLoader(MNIST(root='./data', train=True, process=False, transform=transforms.Compose([
-        transforms.Scale((32, 32)),
+        # transforms.Scale((32, 32)),
+        transforms.Pad(2),
         transforms.ToTensor(),
     ])), batch_size=batch_size, shuffle=True, **kwargs)
 
     test_loader = data_utils.DataLoader(MNIST(root='./data', train=False, process=False, transform=transforms.Compose([
-        transforms.Scale((32, 32)),
+        # transforms.Scale((32, 32)),
+        transforms.Pad(2),
         transforms.ToTensor(),
     ])), batch_size=test_batch_size, shuffle=True, **kwargs)
-    num_images = 1000
+    num_images = 2000
     data = create_numpy_dataset(num_images, train_loader)
     filters, means, outputs = multi_stage_saak_trans(data, energy_thresh=0.97)
-    final_feat_dim = sum([((output.data.shape[1]-1)/2+1)*output.data.shape[2]*output.data.shape[3] for output in outputs])
-    print 'final feature dimension is {}'.format(final_feat_dim)
+    final_feat_dim = sum([(((output.shape[1]-1)/2+1)*output.shape[2]*output.shape[3]) for output in outputs])
     final_feat = get_final_feature(outputs)
     assert final_feat.shape[1] == final_feat_dim
+    print 'final feature dimension is {}'.format(final_feat_dim)
+
+    print '\n-----------------start testing-------------\n'
+
+    test_data = create_numpy_dataset(num_images/2, test_loader)
+    test_outputs = test_multi_stage_saak_trans(test_data, means, filters)
+    test_final_feat = get_final_feature(test_outputs)
+    assert test_final_feat.shape[1] == final_feat_dim
+    print test_final_feat.shape
 
 
 

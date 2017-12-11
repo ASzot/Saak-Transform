@@ -25,7 +25,7 @@ class MNIST(data.Dataset):
 
 
         if not self._check_exists():
-            raise RuntimeError('Dataset not fpound')
+            raise RuntimeError('Dataset not found')
 
         if self.train:
             self.train_data,self.train_label=torch.load(
@@ -107,9 +107,10 @@ class MNIST(data.Dataset):
 
 class DatasetFromHdf5(data.Dataset):
     
-    def __init__(self, hdf5_path):
+    def __init__(self, hdf5_path, transform=None):
         super(DatasetFromHdf5, self).__init__()
         self.hdf5_file = h5py.File(hdf5_path)
+        self.transform = transform
         self.img = np.array(self.hdf5_file.get("img"), np.uint8)
         self.label = np.array(self.hdf5_file.get("label"), np.uint8)
         if self.hdf5_file.get("mean") != None:
@@ -119,7 +120,12 @@ class DatasetFromHdf5(data.Dataset):
 
 
     def __getitem__(self,index):
-        return self.img[index,:,:,:], self.label[index]
+        img, label = self.img[index, :, :, :], self.label[index]
+
+        if self.transform is not None:
+            img=self.transform(img)
+
+        return img,label
         #return torch.from_numpy(self.img[index,:,:,:]).float(), torch.from_numpy(self.labels[index,:,:,:]).float()
 
     def __len__(self):
