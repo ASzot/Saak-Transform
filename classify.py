@@ -55,22 +55,37 @@ def svm_classifier(feat, y, kernel='rbf'):
     clf.fit(feat, y)
     return clf
 
-
-
-
-
-if __name__ == '__main__':
-    # hdf5 file is generated using data/create_hdf5.py
-    # using create_hdf5.py, simply run: python create_hdf5.py
-    # train_path = '/media/eeb435/media/Junting/data/Project/Cityscapes/saak_patches/32x32/hdf5/train_CS_DS2.hdf5'
-    train_path = '/media/eeb435/media/Junting/data/saak_da/data/svhn_train_full_hwc.hdf5'
-    test_path = '/media/eeb435/media/Junting/data/saak_da/data/svhn_train_full_hwc.hdf5'
+def main():
     batch_size = 1
     test_batch_size = 1
     kwargs = {}
     torch.multiprocessing.set_sharing_strategy('file_system')
 
+    # # MNIST
+    # mnist_train = datasets.MNIST(root='./data/mnist', train=True,
+    #                              transform=transforms.Compose([transforms.Pad(2), transforms.ToTensor()]),
+    #                              download=True)
+    # mnist_test = datasets.MNIST(root='./data/mnist', train=False,
+    #                             transform=transforms.Compose([transforms.Pad(2), transforms.ToTensor()]), download=True)
+    # # FASHION-MNIST
+    # mnist_train = MNIST(root='./data/fashion-mnist', train=True,
+    #                              transform=transforms.Compose([transforms.Pad(2), transforms.ToTensor()]), download=True)
+    # mnist_test = MNIST(root='./data/fashion-mnist', train=False,
+    #                             transform=transforms.Compose([transforms.Pad(2), transforms.ToTensor()]), download=True)
+    #
+    # train_loader = data_utils.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, **kwargs)
+    #
+    # test_loader = data_utils.DataLoader(mnist_test, batch_size=test_batch_size, shuffle=False, **kwargs)
+
+
     # # SVHN
+
+    # # Customized data loader
+    # hdf5 file is generated using data/create_hdf5.py
+    # using create_hdf5.py, simply run: python create_hdf5.py
+    # train_path = '/media/eeb435/media/Junting/data/Project/Cityscapes/saak_patches/32x32/hdf5/train_CS_DS2.hdf5'
+    # train_path = '/media/eeb435/media/Junting/data/saak_da/data/svhn_train_full_hwc.hdf5'
+    # test_path = '/media/eeb435/media/Junting/data/saak_da/data/svhn_train_full_hwc.hdf5'
     # train_set = DatasetFromHdf5(train_path, transform=transforms.ToTensor()) #transform=transforms.ToTensor()
     # test_set = DatasetFromHdf5(test_path, transform=transforms.ToTensor())
     #
@@ -80,20 +95,14 @@ if __name__ == '__main__':
     # test_loader = data_utils.DataLoader(dataset=test_set, num_workers=8,
     #                                                batch_size=batch_size, shuffle=False, **kwargs)
 
-    # MNIST
-    train_loader = data_utils.DataLoader(MNIST(root='./data', train=True, process=False, transform=transforms.Compose([
-        # transforms.Scale((32, 32)),
-        transforms.Pad(2),
-        transforms.ToTensor(),
-    ])), batch_size=batch_size, shuffle=True, **kwargs)
+    # Built-in SVHN loader
+    svhn_train = datasets.SVHN(root='./data/svhn', split='train', transform=transforms.ToTensor(), download=True)
+    svhn_test = datasets.SVHN(root='./data/svhn', split='test', transform=transforms.ToTensor(), download=True)
+    train_loader = data_utils.DataLoader(svhn_train, batch_size=batch_size, shuffle=True, **kwargs)
 
-    test_loader = data_utils.DataLoader(MNIST(root='./data', train=False, process=False, transform=transforms.Compose([
-        # transforms.Scale((32, 32)),
-        transforms.Pad(2),
-        transforms.ToTensor(),
-    ])), batch_size=test_batch_size, shuffle=False, **kwargs)
+    test_loader = data_utils.DataLoader(svhn_test, batch_size=test_batch_size, shuffle=False, **kwargs)
 
-    NUM_IMAGES = 60000
+    NUM_IMAGES = None
     num_images = NUM_IMAGES
     data, labels = create_numpy_dataset(num_images, train_loader)
     filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
@@ -103,7 +112,6 @@ if __name__ == '__main__':
     final_feat = saak.get_final_feature(outputs)
     assert final_feat.shape[1] == final_feat_dim
     selected_feat, idx = f_test(final_feat, labels)
-    print selected_feat.shape
     reduced_feat, pca = reduce_feat_dim(selected_feat, dim=64)
     clf = svm_classifier(reduced_feat, labels)
     pred = clf.predict(reduced_feat)
@@ -116,7 +124,6 @@ if __name__ == '__main__':
     test_outputs = saak.test_multi_stage_saak_trans(test_data, means, filters)
     test_final_feat = saak.get_final_feature(test_outputs)
     assert test_final_feat.shape[1] == final_feat_dim
-    print test_final_feat.shape
 
     test_selected_feat = test_final_feat[:, idx]
     test_reduced_feat = pca.transform(test_selected_feat)
@@ -126,9 +133,8 @@ if __name__ == '__main__':
     print 'testing acc is {}'.format(test_acc)
 
 
-
-
-
+if __name__ == '__main__':
+    main()
 
 
 
