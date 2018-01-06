@@ -1,4 +1,4 @@
-from utils import read_image_file, read_label_file
+from data.utils import read_image_file, read_label_file
 import os
 import torch.utils.data as data
 import torch
@@ -106,7 +106,7 @@ class MNIST(data.Dataset):
 
 
 class DatasetFromHdf5(data.Dataset):
-    
+
     def __init__(self, hdf5_path, transform=None):
         super(DatasetFromHdf5, self).__init__()
         self.hdf5_file = h5py.File(hdf5_path)
@@ -136,4 +136,4 @@ class DatasetFromHdf5(data.Dataset):
 
 if __name__=='__main__':
     mnist_train=MNIST(train=True,process=False)
-    print len(mnist_train)
+    print(len(mnist_train))
