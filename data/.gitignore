@@ -2,3 +2,4 @@ cifar
 mnist
 raw
 processed
+__pycache__
