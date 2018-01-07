@@ -6,6 +6,7 @@ import sklearn
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import f_classif
 from sklearn import svm
+from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
 import PIL.Image as Image
 import os
@@ -55,20 +56,27 @@ def reduce_feat_dim(feat, dim=64):
     print('pca reduced feature shape is {}'.format(reduced_feat.shape))
     return reduced_feat, pca
 
-def svm_classifier(feat, y, kernel='rbf'):
-    clf = svm.SVC(kernel=kernel)
+
+def knn_classifier(feat, y, N):
+    clf = KNeighborsClassifier(N, metric='euclidean')
     clf.fit(feat, y)
     return clf
 
-def main():
+def svm_classifier(feat, y, kernel='rbf'):
+    clf = svm.SVC(kernel=kernel, C=100.0, max_iter = 10000, verbose=True)
+    clf.fit(feat, y)
+    return clf
+
+def get_data_loaders():
     batch_size = 1
     test_batch_size = 1
     kwargs = {}
-    torch.multiprocessing.set_sharing_strategy('file_system')
 
     data_dir = 'cifar'
     # No need to pad for CIFAR need to pad 2 for MNIST
     load_transform = transforms.Compose([transforms.ToTensor()])
+    #load_transform = transforms.Compose([transforms.Pad(2), transforms.ToTensor()])
+
     mnist_train = datasets.CIFAR10(root='./data/' + data_dir, train=True,
                                  transform=load_transform,
                                  download=True)
@@ -79,6 +87,14 @@ def main():
     train_loader = data_utils.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, **kwargs)
 
     test_loader = data_utils.DataLoader(mnist_test, batch_size=test_batch_size, shuffle=False, **kwargs)
+
+    return train_loader, test_loader
+
+
+def main():
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+    train_loader, test_loader = get_data_loaders()
 
     NUM_IMAGES = None
     num_images = NUM_IMAGES
@@ -100,8 +116,11 @@ def main():
     # Remove some of the features with an f-test
     selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
     reduced_feat, pca = reduce_feat_dim(selected_feat, dim=248)
-    clf = svm_classifier(reduced_feat, labels)
+
+    #clf = svm_classifier(reduced_feat, labels)
+    clf = knn_classifier(reduced_feat, labels, 20)
     pred = clf.predict(reduced_feat)
+
     acc = sklearn.metrics.accuracy_score(labels, pred)
     print('training acc is {}'.format(acc))
 
@@ -112,6 +131,8 @@ def main():
     test_final_feat = saak.get_final_feature(test_outputs)
     assert test_final_feat.shape[1] == final_feat_dim
 
+    # Select only the features as determined by the original f-score feature
+    # selection.
     test_selected_feat = test_final_feat[:, idx]
     test_reduced_feat = pca.transform(test_selected_feat)
     print('testing reducued feat shape {}'.format(test_reduced_feat.shape))

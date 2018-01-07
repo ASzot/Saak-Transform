@@ -25,14 +25,14 @@ def k_mean_clustering(data = None, feature = None, K = 10, num_centroids_to_visu
     kmeans = KMeans(n_clusters=K, random_state=0, n_jobs=-1).fit(feature)
     labels = kmeans.labels_
     centroids = kmeans.cluster_centers_
-    
+
     if num_centroids_to_visualize is not -1:
 
         neigh = NearestNeighbors(num_centroids_to_visualize, metric='euclidean')
 
         neigh.fit(feature)
         central_samples_indices = neigh.kneighbors(centroids, num_centroids_to_visualize, return_distance=False)
-        
+
         for i in range(K):
             centroid_path = os.path.join(centroid_dir, 'centroid_' + str(num_centroids_to_visualize),
                                          'cluster_' + str(i))
@@ -44,7 +44,7 @@ def k_mean_clustering(data = None, feature = None, K = 10, num_centroids_to_visu
                 scipy.misc.toimage(img_array, cmin=0.0, cmax=1.0, channel_axis=2).save(os.path.join(centroid_path, str(j+1) + '.png'))
     else:
         pass
-                
+
 if __name__=='__main__':
     batch_size = 1
     test_batch_size = 1
@@ -73,13 +73,16 @@ if __name__=='__main__':
     NUM_VIS = 20
     NUM_IMAGES = None
     num_images = NUM_IMAGES
+
     data = saak.create_numpy_dataset(num_images, train_loader)
+
     filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum(
         [((output.shape[1] - 1) / 2 + 1) * output.shape[2] * output.shape[3] for output in outputs])
-    print 'final feature dimension is {}'.format(final_feat_dim)
+    print('final feature dimension is {}'.format(final_feat_dim))
     final_feat = saak.get_final_feature(outputs)
     assert final_feat.shape[1] == final_feat_dim
     print(final_feat.shape)
+
     k_mean_clustering(data=data, feature=final_feat, K=K, num_centroids_to_visualize=NUM_VIS)
 

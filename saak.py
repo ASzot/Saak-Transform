@@ -204,14 +204,10 @@ def one_stage_saak_trans(datasets=None, stage=0, energy_thresh=1.0):
 
     #subtract patch mean
     N, C, H, W = datasets.shape
-    print('Datasets shape')
-    print('(%i, %i, %i, %i)' % (N, C, H, W))
 
     mean_filter = 1.0 / (C* 2 * 2) * np.ones((1, C, 2, 2), dtype=np.float32)
     patch_mean = conv(mean_filter, datasets, stride=2)
     patch_mean_up = F.upsample(patch_mean, scale_factor=2, mode='nearest')
-    print('Patch mean shape')
-    print(patch_mean_up.shape)
 
     normalized_data = datasets - patch_mean_up.data.numpy()
 

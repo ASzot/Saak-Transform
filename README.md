@@ -1,35 +1,22 @@
 # Saak Transform 
 
-This is a reimplementation of the paper **On Data-Driven Saak Transform** (https://arxiv.org/abs/1710.04176),  maintained by Jiali Duan and Yueru Chen.
+Reimplementation of the paper **On Data-Driven Saak Transform** (https://arxiv.org/abs/1710.04176).
 
-### Table of Content
+## Obtained Accuracies      
 
-- [Dataset] ( Hand-written digits classification)
-	* [Mnist] ( train set: 60000, 28x28. We used the same with downloaded from http://yann.lecun.com/exdb/mnist/)
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| Dataset     | Train Accuracy | Test Accuracy | f-thresh | psnr-thresh | C   | K  |
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| MNIST       | 99.08          | 98.21         | 0.75     | 0.97        |     |    |
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| CIFAR (svm) | 86.82          | 58.82         | 0.75     | 0.97        | 1   |    |
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| CIFAR (svm) | 100            | 60.31         | 0.75     | 0.97        | 100 |    |
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| CIFAR (knn) | 50.71          | 39.96         | 0.75     | 0.97        |     | 10 |
+|-------------+----------------+---------------+----------+-------------+-----+----|
+| CIFAR (knn) | 45.09          | 39.88         | 0.75     | 0.97        |     | 20 |
+|-------------+----------------+---------------+----------+-------------+-----+----|
 
-- [Installation] (sklearn and Pytorch)
-	* [Sklearn Installation] Refer to http://scikit-learn.org/stable/install.html)
-	* [Pytorch Installation] (Refer to http://pytorch.org)
-	* [Optional: Jupyter Notebook] (Refer to http://jupyter.org/install.html)
-
-- [How to] (Forward and Inverse Transform)
-	* Forward Transform: `multi_stage_saak_trans`
-	* Inverse Transform: `toy_recon(outputs,filters)`
-
-- [To-do list]
-	- [x] One-stage Saak Transform
-	- [x] Multi-stage Saak Transform
-	- [x] Inverse Transform
-
-- [Other Code] 
-	- [notebook] multi-stage_saak.ipynb
-	- [dataset I/O] datasets.py, utils.py
-
-- [Contact Me](#Contact-me)
-
-
-## Contact me
-
-Jiali Duan (Email: jli.duan@gmail.com)
-
-Yueru Chen (Email: yueruche@usc.edu)
+Note that I also tried the SVM on CIFAR with a maximum number of iterations.
+However, this got similar accuracy.
