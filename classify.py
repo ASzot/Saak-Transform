@@ -12,6 +12,7 @@ import PIL.Image as Image
 import os
 
 import saak
+import analyze_patches
 
 def create_numpy_dataset(num_images, train_loader, take_count=-1):
     datasets = []
@@ -94,9 +95,11 @@ def get_data_loaders():
 def main():
     torch.multiprocessing.set_sharing_strategy('file_system')
 
+    #analyze_patches.load_analyze()
+
     train_loader, test_loader = get_data_loaders()
 
-    NUM_IMAGES = None
+    NUM_IMAGES = 10000
     num_images = NUM_IMAGES
     data, labels = create_numpy_dataset(num_images, train_loader)
 
@@ -104,7 +107,18 @@ def main():
     # Ex: 0: (N, 7, 16, 16)
     #     1: (N, 55, 8, 8)
     #     ...
-    filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
+
+    save_file_path = 'data/processed/examine_patches.npy'
+    if not os.path.isfile(save_file_path):
+        filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
+        examine_level = outputs[1]
+        np.save(save_file_path, examine_level)
+    else:
+        examine_level = np.load(save_file_path)
+
+    analyze_patches.analyze(examine_level)
+
+    raise ValueError('Done')
 
     final_feat_dim = sum(
         [((output.shape[1] - 1) / 2 + 1) * output.shape[2] * output.shape[3] for output in outputs])
