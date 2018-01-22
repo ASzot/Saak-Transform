@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import f_classif
 from sklearn import svm
 from sklearn.neighbors import KNeighborsClassifier
+from scipy.ndimage import imread
 import numpy as np
 import PIL.Image as Image
 import os
@@ -109,14 +110,28 @@ def main():
     #     ...
 
     save_file_path = 'data/processed/examine_patches.npy'
+    e_save_file_path = 'data/processed/e_examine_patches.npy'
     if not os.path.isfile(save_file_path):
+        e_data = []
+        use_dir = 'data/mcl/automobile/'
+        for f in os.listdir(use_dir):
+            e_data.append(imread(use_dir + f) / 255.0)
+
+        e_data = np.array(e_data).reshape(-1, 3, 32, 32)
+
+        e_filters, e_means, e_outputs = saak.multi_stage_saak_trans(e_data, energy_thresh=0.97)
+
         filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
+
         examine_level = outputs[1]
+        e_examine_level = e_outputs[1]
         np.save(save_file_path, examine_level)
+        np.save(e_save_file_path, e_examine_level)
     else:
         examine_level = np.load(save_file_path)
+        e_examine_level = np.load(e_save_file_path)
 
-    analyze_patches.analyze(examine_level)
+    analyze_patches.analyze(examine_level, e_examine_level)
 
     raise ValueError('Done')
 

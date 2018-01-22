@@ -49,55 +49,108 @@ def load_analyze():
 
     #print(pred_labels.shape)
 
-def analyze(patches):
+def reshape_patches(patches):
     patches_shape = patches.shape
     flattened_patches = patches.reshape((patches_shape[0],
         patches_shape[1], patches_shape[2] * patches_shape[3]))
 
     flattened_patches = flattened_patches.T
-    flattened_patches = flattened_patches.reshape((-1, patches_shape[0],
-        patches_shape[1]))
+    flattened_patches = flattened_patches.reshape((-1, patches_shape[1],
+        patches_shape[0]))
 
-    r_a = dct(flattened_patches, norm='ortho', axis=-1)
-    all_patches = []
+    return flattened_patches
+
+def analyze_per_patch(patches):
+    # Should be in the form (# patches, ...)
+    print('-' * 40)
+    for i, patch in enumerate(patches):
+        desc = stats.describe(patch, axis=None)
+        print('%i) %.5f, %.5f' % (i, desc.mean, desc.variance))
+    print('-' * 40)
+
+def analyze_spectral(patches):
+    # Should be in the form (# patches, ...)
+
+    for i, patch in enumerate(patches):
+        variances = []
+        for comp in patch:
+
+            desc = stats.describe(comp)
+            variances.append(desc.variance)
+
+        var_desc = stats.describe(variances)
+
+        print('%i) %.5f, %.5f, %.5f, %.5f' % (i, var_desc.minmax[0],
+            var_desc.minmax[1], var_desc.mean, var_desc.variance))
+
+def bin_labels(labels, pred_labels):
+    freqs = {}
+    for label, pred_label in zip(labels, pred_labels):
+        if pred_label not in freqs:
+            freqs[pred_label] = {}
+        if label not in freqs[pred_label]:
+            freqs[pred_label][label] = 0
+        freqs[pred_label][label] += 1
+
+    return freqs
+
+def analyze(patches, e_patches):
+    patches = reshape_patches(patches)
+    e_patches = reshape_patches(e_patches)
+
+    print(patches.shape)
+    print(e_patches.shape)
+
+    #analyze_per_patch(patches)
+    #analyze_spectral(e_patches)
+
+    r_a = dct(patches, norm='ortho', axis=-1)
     labels = []
+    all_patches = []
     for i, patch in enumerate(r_a):
         labels.extend([i] * len(patch))
         all_patches.extend(patch)
 
+    all_patches = np.array(all_patches)
+
     ms = MiniBatchKMeans(n_clusters = 64)
     #all_patches, labels = shuffle(all_patches, labels)
 
-    #take_count = 10000
-    #all_patches = all_patches[:take_count]
-    #labels = labels[:take_count]
+    ##take_count = 10000
+    ##all_patches = all_patches[:take_count]
+    ##labels = labels[:take_count]
 
-    all_patches = np.array(all_patches)
-    print(all_patches.shape)
+    #all_patches = np.array(all_patches)
+    #print(all_patches.shape)
 
     print('Fitting')
     pred_labels = ms.fit_predict(all_patches)
-    print(metrics.accuracy_score(labels, pred_labels))
+    print('SS')
+    print(metrics.silhouette_score(all_patches, pred_labels, metric='euclidean'))
+    freqs = bin_labels(labels, pred_labels)
+    for label in freqs:
+        print(sorted(freqs[label].items(), key=lambda x: x[1]))
 
-    # Group samples
-    groups = {}
-    for l, p in zip(pred_labels, all_patches):
-        if l not in groups:
-            groups[l] = []
-        groups[l].append(p)
+    #print(metrics.accuracy_score(labels, pred_labels))
 
-    variances = []
-    for label in groups:
-        group = np.array(groups[label])
-        variances.append(np.var(group.flatten()))
+    ## Group samples
+    #groups = {}
+    #for l, p in zip(pred_labels, all_patches):
+    #    if l not in groups:
+    #        groups[l] = []
+    #    groups[l].append(p)
 
-    print(stats.describe(variances))
+    #variances = []
+    #for label in groups:
+    #    group = np.array(groups[label])
+    #    variances.append(np.var(group.flatten()))
 
+    #print(stats.describe(variances))
 
-    np.save('data/processed/patches.npy', np.array(all_patches))
-    np.save('data/processed/labels.npy', np.array(labels))
-    np.save('data/processed/pred_labels.npy', np.array(pred_labels))
-    np.save('data/processed/centroids.npy', np.array(ms.cluster_centers_))
+    #np.save('data/processed/patches.npy', np.array(all_patches))
+    #np.save('data/processed/labels.npy', np.array(labels))
+    #np.save('data/processed/pred_labels.npy', np.array(pred_labels))
+    #np.save('data/processed/centroids.npy', np.array(ms.cluster_centers_))
 
     #labels = np.load('processed/labels.npy')
     #cluster_centers = np.load('processed/centroids.npy')

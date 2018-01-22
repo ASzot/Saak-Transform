@@ -184,8 +184,6 @@ def conv(filters,datasets,stride=2):
 @ input: datasets [60000, channel, size,size]
 '''
 def one_stage_saak_trans(datasets=None, stage=0, energy_thresh=1.0):
-
-
     # load dataset, (60000,1,32,32)
     # input_channel: 1->7
     print('one_stage_saak_trans: datasets.shape {}'.format(datasets.shape))
