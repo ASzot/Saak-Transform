@@ -94,12 +94,10 @@ def bin_labels(labels, pred_labels):
 
     return freqs
 
-def analyze(patches, e_patches):
+def analyze(patches):
     patches = reshape_patches(patches)
-    e_patches = reshape_patches(e_patches)
 
     print(patches.shape)
-    print(e_patches.shape)
 
     #analyze_per_patch(patches)
     #analyze_spectral(e_patches)

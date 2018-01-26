@@ -14,6 +14,7 @@ import os
 
 import saak
 import analyze_patches
+import research_tools as rt
 
 def create_numpy_dataset(num_images, train_loader, take_count=-1):
     datasets = []
@@ -92,49 +93,36 @@ def get_data_loaders():
 
     return train_loader, test_loader
 
+def load_toy_dataset():
+    dataset_path = 'data/mcl/'
+    data = []
+    labels = []
 
-def main():
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    appropriate_labels = {
+            'airplane': 0,
+            'automobile': 1,
+            'bird': 2,
+            'cat': 3,
+            'deer': 4,
+            'dog': 5,
+            'frog': 6,
+            'horse': 7,
+            'ship': 8,
+            'truck': 9
+            }
 
-    #analyze_patches.load_analyze()
+    for class_name in os.listdir(dataset_path):
+        full_path = dataset_path + class_name + '/'
+        appropriate_label = appropriate_labels[class_name]
+        for f in os.listdir(full_path):
+            data.append(imread(full_path + f) / 255.0)
+            labels.append(appropriate_label)
 
-    train_loader, test_loader = get_data_loaders()
+    return np.array(data), np.array(labels)
 
-    NUM_IMAGES = 10000
-    num_images = NUM_IMAGES
-    data, labels = create_numpy_dataset(num_images, train_loader)
-
-    # outputs is the list of saak coefficients for each layer.
-    # Ex: 0: (N, 7, 16, 16)
-    #     1: (N, 55, 8, 8)
-    #     ...
-
-    save_file_path = 'data/processed/examine_patches.npy'
-    e_save_file_path = 'data/processed/e_examine_patches.npy'
-    if not os.path.isfile(save_file_path):
-        e_data = []
-        use_dir = 'data/mcl/automobile/'
-        for f in os.listdir(use_dir):
-            e_data.append(imread(use_dir + f) / 255.0)
-
-        e_data = np.array(e_data).reshape(-1, 3, 32, 32)
-
-        e_filters, e_means, e_outputs = saak.multi_stage_saak_trans(e_data, energy_thresh=0.97)
-
-        filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
-
-        examine_level = outputs[1]
-        e_examine_level = e_outputs[1]
-        np.save(save_file_path, examine_level)
-        np.save(e_save_file_path, e_examine_level)
-    else:
-        examine_level = np.load(save_file_path)
-        e_examine_level = np.load(e_save_file_path)
-
-    analyze_patches.analyze(examine_level, e_examine_level)
-
-    raise ValueError('Done')
-
+def train_data(data, labels):
+    data = data.reshape(-1, 3, 32, 32)
+    filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum(
         [((output.shape[1] - 1) / 2 + 1) * output.shape[2] * output.shape[3] for output in outputs])
     # This is the dimensionality of each datapoint.
@@ -153,11 +141,35 @@ def main():
     acc = sklearn.metrics.accuracy_score(labels, pred)
     print('training acc is {}'.format(acc))
 
+    return clf, filters, means, final_feat_dim, idx, pca
+
+def main():
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+    train_loader, test_loader = get_data_loaders()
+
+    NUM_IMAGES = 10000
+    num_images = NUM_IMAGES
+    data, labels = create_numpy_dataset(num_images, train_loader)
+    toy_data, toy_labels = load_toy_dataset()
+
+    ## outputs is the list of saak coefficients for each layer.
+    ## Ex: 0: (N, 7, 16, 16)
+    ##     1: (N, 55, 8, 8)
+    ##     ...
+
+    clf, filters, means, final_feat_dim, idx, pca = train_data(toy_data, toy_labels)
+
     print('\n-----------------start testing-------------\n')
 
-    test_data, test_labels = create_numpy_dataset(None, test_loader)
-    test_outputs = saak.test_multi_stage_saak_trans(test_data, means, filters)
-    test_final_feat = saak.get_final_feature(test_outputs)
+    def create_test_dataset():
+        test_data, test_labels = create_numpy_dataset(None, test_loader)
+        test_outputs = saak.test_multi_stage_saak_trans(test_data, means, filters)
+        test_final_feat = saak.get_final_feature(test_outputs)
+        return test_final_feat, test_labels
+
+    test_final_feat, test_labels = rt.cached_action(create_test_dataset, 'data/transformed/', ['data', 'labels'])
+
     assert test_final_feat.shape[1] == final_feat_dim
 
     # Select only the features as determined by the original f-score feature
