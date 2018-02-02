@@ -66,8 +66,10 @@ def knn_classifier(feat, y, N):
     return clf
 
 def svm_classifier(feat, y, kernel='rbf'):
-    clf = svm.SVC(kernel=kernel, C=100.0, max_iter = 10000, verbose=True)
+    clf = svm.SVC(kernel=kernel, probability=True)
+    print('Fitting data to svm')
     clf.fit(feat, y)
+    print('Data fitted')
     return clf
 
 def get_data_loaders():
@@ -142,6 +144,7 @@ def train_data(data, labels):
     print('training acc is {}'.format(acc))
 
     return clf, filters, means, final_feat_dim, idx, pca
+
 
 def main():
     torch.multiprocessing.set_sharing_strategy('file_system')

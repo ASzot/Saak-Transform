@@ -27,3 +27,12 @@ def convert_bins_to_pcts(bins):
     return bins, total_vals
 
 
+
+def bin_samples(samples, classes):
+    bins = {}
+    for sample, c in zip(samples, classes):
+        if c not in bins:
+            bins[c] = []
+        bins[c].append(sample)
+
+    return bins
