@@ -1,3 +1,4 @@
+import numpy as np
 
 # [cluster index] -> [Frequencies of real labels associated with that cluster]
 def bin_labels(labels, pred_labels):
@@ -35,4 +36,19 @@ def bin_samples(samples, classes):
             bins[c] = []
         bins[c].append(sample)
 
+    for k in bins:
+        bins[k] = np.array(bins[k])
+
     return bins
+
+
+def kl_eps(a, b, eps=1e-4):
+    accum = 0.0
+    assert len(a) == len(b), 'Length of two disbtributions must be the same'
+    for i in range(len(a)):
+        use_a = max(a[i], eps)
+        use_b = max(b[i], eps)
+        accum += a[i] * np.log(a[i] / use_b)
+
+    return -accum
+

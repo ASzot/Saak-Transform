@@ -66,7 +66,7 @@ def knn_classifier(feat, y, N):
     return clf
 
 def svm_classifier(feat, y, kernel='rbf'):
-    clf = svm.SVC(kernel=kernel, probability=True)
+    clf = svm.SVC(kernel=kernel)
     print('Fitting data to svm')
     clf.fit(feat, y)
     print('Data fitted')

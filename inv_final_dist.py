@@ -71,7 +71,7 @@ def compute_class_stats(data, class_name):
     ##print(sample_energy.shape)
 
 def compute_energy(samples):
-    samples = np.fft.fft(samples)
+    #samples = np.fft.fft(samples, axis=1)
     samples = np.absolute(samples)
     samples = np.square(samples)
 
@@ -144,8 +144,6 @@ def compare_classes(use_class, data_dict):
     #energies = energies.flatten()
 
     all_energies.append(energies.T)
-
-
     for other_class in os.listdir('data/mcl'):
         if other_class == use_class:
             continue
