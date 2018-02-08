@@ -42,13 +42,14 @@ def bin_samples(samples, classes):
     return bins
 
 
-def kl_eps(a, b, eps=1e-4):
+def kl_div(a, b, eps=1e-4):
     accum = 0.0
     assert len(a) == len(b), 'Length of two disbtributions must be the same'
-    for i in range(len(a)):
-        use_a = max(a[i], eps)
-        use_b = max(b[i], eps)
-        accum += a[i] * np.log(a[i] / use_b)
+    return np.sum(a + np.log(a / b))
+    #for i in range(len(a)):
+    #    #use_a = max(a[i], eps)
+    #    #use_b = max(b[i], eps)
+    #    accum += a[i] * np.log( / use_b)
 
-    return -accum
+    #return -accum
 

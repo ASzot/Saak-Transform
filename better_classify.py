@@ -13,19 +13,16 @@ import sklearn
 
 import numpy as np
 import os
+from tqdm import tqdm
+from itertools import groupby
 
 from classify import load_toy_dataset, f_test, svm_classifier, f_test, reduce_feat_dim
+from classify import create_numpy_dataset, get_data_loaders, train_data
+import clustering_helper as ch
+from inv_final_dist import compute_energy
 
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
-
-from classify import create_numpy_dataset, get_data_loaders, train_data
-
-from itertools import groupby
-
-import clustering_helper as ch
-
-from inv_final_dist import compute_energy
 
 plt.switch_backend('agg')
 
@@ -144,15 +141,71 @@ def gcm_test(feat, labels):
     return feat[:, idx], idx
 
 
-def kl_test(data, labels):
+def kl_test(feat, labels):
+    print('Using KL test to select coeffs')
     binned = ch.bin_samples(feat, labels)
 
     binned_items = [(c, compute_energy(samples.T)) for c, samples in
             binned.items()]
+    # Binned items is a dictionary where key is the class
+    # and value is the data belonging to the class in the form of
+    # (# channels, # samples)
 
-    print(len(binned_items))
+    comps = []
+    is_first = True
+    for c, energies in binned_items:
+        for i in range(len(energies)):
+            if is_first:
+                comps.append({})
+            comps[i][c] = energies[i]
 
+        is_first = False
 
+    def agg_other_samples(comp, cur_c):
+        aggr = []
+        for c, samples in comp.items():
+            if c != cur_c:
+                aggr.extend(samples)
+
+        return np.array(aggr)
+
+    def normalize_hist(dist, eps=1e-4):
+        total = np.sum(dist)
+        dist = np.array(dist)
+        norm = dist / total
+        # Also remove any very small values.
+        norm[norm < eps] = eps
+        return norm
+
+    max_sample_count = np.amax([len(samples) for samples in comps[0].values()])
+    bin_count = int(np.sqrt(max_sample_count * 9))
+
+    # Initialize to an empty array
+    comps_w_kl = [0.0] * len(comps)
+
+    for i, comp in tqdm(enumerate(comps)):
+        all_kl = []
+        for c, samples in comp.items():
+            # Aggregate every other class
+            others = agg_other_samples(comp, c)
+
+            # Get data distributions for both datasets.
+            this_dist, bin_edges = np.histogram(samples, bins='auto')
+            other_dist, _ = np.histogram(samples, bins=bin_edges)
+
+            this_dist = normalize_hist(this_dist)
+            other_dist = normalize_hist(other_dist)
+
+            # Compute the KL divergence between the two distributions.
+            kl_div = ch.kl_div(this_dist, other_dist)
+            all_kl.append(kl_div)
+
+        comps_w_kl[i] = np.amax(all_kl)
+
+    TAKE_COUNT = 1000
+    arg_sorted = np.argsort(comps_w_kl)
+    arg_sorted = np.flipud(arg_sorted)
+    idx = arg_sorted[:TAKE_COUNT]
 
     return feat[:, idx], idx
 
@@ -175,10 +228,8 @@ def train_data(data, labels):
     assert final_feat.shape[1] == final_feat_dim
 
     # Remove some of the features with an f-test
-    print('Using GCM')
     selected_feat, idx = kl_test(final_feat, labels)
     #selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
-    print('Selected using gcm')
     print(selected_feat.shape)
 
     reduced_feat, pca = reduce_feat_dim(selected_feat, dim=248)
@@ -225,38 +276,6 @@ def main():
     print('testing reducued feat shape {}'.format(test_reduced_feat.shape))
 
     test_pred = clf.predict(test_reduced_feat)
-    #test_prob = clf.predict_proba(test_reduced_feat)
-
-    #wrong_preds_diff = []
-    #right_preds_diff = []
-
-    #wrong_preds_var = []
-    #right_preds_var = []
-
-    #count_right = 0
-    #count_wrong = 0
-
-    #for t_lbl, t_pred, prob in zip(test_labels, test_pred, test_prob):
-    #    max_vals = np.sort(prob)[::-1]
-    #    prob_diff = max_vals[0] - max_vals[1]
-    #    prob_var = np.var(max_vals)
-    #    diff_one = 1 - max_vals[0]
-    #    if t_pred != t_lbl:
-    #        if diff_one < 0.25:
-    #            count_right += 1
-    #        wrong_preds_diff.append(diff_one)
-    #        wrong_preds_var.append(prob_var)
-    #    else:
-    #        if diff_one < 0.25:
-    #            count_wrong += 1
-    #        right_preds_diff.append(diff_one)
-    #        right_preds_var.append(prob_var)
-
-    ##print(stats.describe(right_preds_var))
-    #print(stats.describe(wrong_preds_diff))
-    ##print(stats.describe(wrong_preds_var))
-    #print(count_right)
-    #print(count_wrong)
 
     test_acc = sklearn.metrics.accuracy_score(test_labels, test_pred)
     print('testing acc is {}'.format(test_acc))
