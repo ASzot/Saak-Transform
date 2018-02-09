@@ -13,6 +13,7 @@ import sklearn
 
 import numpy as np
 import os
+import shutil
 from tqdm import tqdm
 from itertools import groupby
 
@@ -25,51 +26,6 @@ import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 
 plt.switch_backend('agg')
-
-def plot_normal(mu, sigma):
-    x = np.linspace(mu - 3*sigma, mu + 3*sigma, 100)
-    plt.plot(x, mlab.normpdf(x, mu, sigma), 'k')
-
-
-def plot_comps(comps, add_path, max_dists):
-    use_path = 'data/results/energy_hists/'
-
-    for i, (comp, max_dist) in enumerate(zip(comps, max_dists)):
-        plt.title('Max: ' + str(max_dist))
-        for m, v in comp:
-            plot_normal(m, np.sqrt(v))
-
-        total_path = use_path + add_path + '/' + str(i) + '/'
-        if not os.path.exists(total_path):
-            os.makedirs(total_path)
-
-        plt.savefig(total_path + 'total.png')
-        plt.clf()
-
-
-
-def plot_histo(data, comp_i, class_i, mean, std, add_path):
-    use_path = 'data/results/energy_hists/'
-    total_path = use_path + add_path + '/' + str(comp_i) + '/'
-
-    if not os.path.exists(total_path):
-        os.makedirs(total_path)
-
-    plt.hist(data, 50, facecolor='green')
-    plt.title('mu %.4f, STD: %.4f' % (mean, std))
-    plt.xlabel('Energy')
-    plt.ylabel('Frequency')
-    save_path = total_path + str(class_i) + '.png'
-    print('Saving to ' + save_path)
-    plt.savefig(save_path)
-    plt.clf()
-
-
-def plot_dist_hist(comps, add_path):
-    for comp_i, comp in enumerate(comps):
-
-        for class_i, data in enumerate(comp):
-            plot_histo(data, comp_i, class_i, np.mean(data), np.std(data), add_path)
 
 
 
@@ -141,7 +97,63 @@ def gcm_test(feat, labels):
     return feat[:, idx], idx
 
 
-def kl_test(feat, labels):
+
+def plot_normal(mu, sigma):
+    x = np.linspace(mu - 3*sigma, mu + 3*sigma, 100)
+    plt.plot(x, mlab.normpdf(x, mu, sigma), 'k')
+
+
+def plot_comps(comps, add_path, max_dists):
+    use_path = 'data/results/energy_hists/'
+
+    for i, (comp, max_dist) in enumerate(zip(comps, max_dists)):
+        plt.title('Max: ' + str(max_dist))
+        for m, v in comp:
+            plot_normal(m, np.sqrt(v))
+
+        total_path = use_path + add_path + '/' + str(i) + '/'
+        if not os.path.exists(total_path):
+            os.makedirs(total_path)
+
+        plt.savefig(total_path + 'total.png')
+        plt.clf()
+
+
+def plot_histo(data, comp_i, class_i, mean, std, add_path):
+    use_path = 'data/results/energy_hists/'
+    total_path = use_path + add_path + '/' + str(comp_i) + '/'
+
+    if not os.path.exists(total_path):
+        os.makedirs(total_path)
+
+    plt.hist(data, 50, facecolor='green')
+    plt.title('mu %.4f, STD: %.4f' % (mean, std))
+    plt.xlabel('Energy')
+    plt.ylabel('Frequency')
+    save_path = total_path + str(class_i) + '.png'
+    print('Saving to ' + save_path)
+    plt.savefig(save_path)
+    plt.clf()
+
+
+def plot_dist_hist(comps, add_path):
+    for comp_i, comp in enumerate(comps):
+
+        for class_i, data in enumerate(comp):
+            plot_histo(data, comp_i, class_i, np.mean(data), np.std(data), add_path)
+
+
+def plot_histo_ready(freqs, bin_edges, comp, c, add_str, base_path):
+    use_path = base_path + str(comp) + '/' + str(c) + '/'
+    if not os.path.exists(use_path):
+        os.makedirs(use_path)
+
+    plt.bar(np.arange(len(bin_edges) - 1), freqs, color='r')
+    save_path = use_path + add_str + '.png'
+    print('Saving ' + save_path)
+    plt.savefig(save_path)
+
+def kl_test(feat, labels, should_plot=False):
     print('Using KL test to select coeffs')
     binned = ch.bin_samples(feat, labels)
 
@@ -173,25 +185,40 @@ def kl_test(feat, labels):
         total = np.sum(dist)
         dist = np.array(dist)
         norm = dist / total
-        # Also remove any very small values.
+        # Remove any very small values
         norm[norm < eps] = eps
         return norm
 
+    # Get the maximum number of samples across each class
+    # (If using the full dataset the max should just be equal to the number of
+    # samples per class)
     max_sample_count = np.amax([len(samples) for samples in comps[0].values()])
+    # Compute the number of bins to use when constructing the histograms
     bin_count = int(np.sqrt(max_sample_count * 9))
+    print('There are %i bins' % bin_count)
 
-    # Initialize to an empty array
-    comps_w_kl = [0.0] * len(comps)
+    # Initialize components with to an empty array
+    kl_comps = [0.0] * len(comps)
+
+    base_path = 'data/results/compare_hists/'
+    if os.path.exists(base_path):
+        shutil.rmtree(base_path)
 
     for i, comp in tqdm(enumerate(comps)):
         all_kl = []
+        use_bins = bin_count
         for c, samples in comp.items():
-            # Aggregate every other class
+            # Aggregate samples for every other class
             others = agg_other_samples(comp, c)
 
             # Get data distributions for both datasets.
-            this_dist, bin_edges = np.histogram(samples, bins='auto')
-            other_dist, _ = np.histogram(samples, bins=bin_edges)
+            # (numpy auto setting will automatically determine the number of # bins to use)
+            this_dist, bin_edges = np.histogram(samples, bins=bin_count)
+            other_dist, _ = np.histogram(others, bins=bin_edges)
+
+            if should_plot:
+                plot_histo_ready(this_dist, bin_edges, i, c, 'this', base_path)
+                plot_histo_ready(other_dist, bin_edges, i, c, 'other', base_path)
 
             this_dist = normalize_hist(this_dist)
             other_dist = normalize_hist(other_dist)
@@ -200,10 +227,10 @@ def kl_test(feat, labels):
             kl_div = ch.kl_div(this_dist, other_dist)
             all_kl.append(kl_div)
 
-        comps_w_kl[i] = np.amax(all_kl)
+        kl_comps[i] = np.amax(all_kl)
 
-    TAKE_COUNT = 1000
-    arg_sorted = np.argsort(comps_w_kl)
+    TAKE_COUNT = 2000
+    arg_sorted = np.argsort(kl_comps)
     arg_sorted = np.flipud(arg_sorted)
     idx = arg_sorted[:TAKE_COUNT]
 
@@ -223,12 +250,12 @@ def train_data(data, labels):
     final_feat_dim = sum(
         [((output.shape[1] - 1) / 2 + 1) * output.shape[2] * output.shape[3] for output in outputs])
     # This is the dimensionality of each datapoint.
-    print('final feature dimension is {}'.format(final_feat_dim))
     final_feat = saak.get_final_feature(outputs)
+    print('final feature dimension is {}'.format(final_feat.shape[1]))
     assert final_feat.shape[1] == final_feat_dim
 
     # Remove some of the features with an f-test
-    selected_feat, idx = kl_test(final_feat, labels)
+    selected_feat, idx = kl_test(final_feat, labels, True)
     #selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
     print(selected_feat.shape)
 
@@ -248,8 +275,8 @@ def main():
 
     train_loader, test_loader = get_data_loaders()
 
-    NUM_IMAGES_TRAIN = 2000
-    #NUM_IMAGES_TRAIN = None
+    #NUM_IMAGES_TRAIN = 2000
+    NUM_IMAGES_TRAIN = None
     data, labels = create_numpy_dataset(NUM_IMAGES_TRAIN, train_loader)
 
     clf, filters, means, final_feat_dim, idx, pca = train_data(data, labels)
@@ -257,8 +284,8 @@ def main():
     print('\n-----------------start testing-------------\n')
 
     def create_test_dataset():
-        NUM_IMAGES_TEST = 500
-        #NUM_IMAGES_TEST = None
+        #NUM_IMAGES_TEST = 500
+        NUM_IMAGES_TEST = None
         test_data, test_labels = create_numpy_dataset(NUM_IMAGES_TEST, test_loader)
         test_outputs = saak.test_multi_stage_saak_trans(test_data, means, filters)
         test_final_feat = saak.get_final_feature(test_outputs)
