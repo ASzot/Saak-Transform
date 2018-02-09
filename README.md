@@ -2,21 +2,9 @@
 
 Reimplementation of the paper **On Data-Driven Saak Transform** (https://arxiv.org/abs/1710.04176).
 
-## Obtained Accuracies      
+This repo is much of my work at the MCL at USC. I use this framework I have
+built to test theories about how to use the Saak transform for classification
+and visualizing the Saak coefficients. 
 
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| Dataset     | Train Accuracy | Test Accuracy | f-thresh | psnr-thresh | C   | K  |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| MNIST       | 99.08          | 98.21         | 0.75     | 0.97        |     |    |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| CIFAR (svm) | 86.82          | 58.82         | 0.75     | 0.97        | 1   |    |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| CIFAR (svm) | 100            | 60.31         | 0.75     | 0.97        | 100 |    |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| CIFAR (knn) | 50.71          | 39.96         | 0.75     | 0.97        |     | 10 |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-| CIFAR (knn) | 45.09          | 39.88         | 0.75     | 0.97        |     | 20 |
-|-------------+----------------+---------------+----------+-------------+-----+----|
-
-Note that I also tried the SVM on CIFAR with a maximum number of iterations.
-However, this got similar accuracy.
+The code is very messy as it is often just quick experiments. For a more
+detailed a clean implementation of the Saak transform go to https://github.com/davidsonic/Saak-Transform.
