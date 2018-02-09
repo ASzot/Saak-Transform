@@ -143,15 +143,20 @@ def plot_dist_hist(comps, add_path):
             plot_histo(data, comp_i, class_i, np.mean(data), np.std(data), add_path)
 
 
-def plot_histo_ready(freqs, bin_edges, comp, c, add_str, base_path):
+def plot_histo_ready(freqs, bin_edges, kl_div, comp, c, add_str, base_path):
     use_path = base_path + str(comp) + '/' + str(c) + '/'
     if not os.path.exists(use_path):
         os.makedirs(use_path)
 
+    plt.title('KLD: %.4f' % (kl_div))
+    plt.xlabel('Energy')
+    plt.ylabel('Frequency')
     plt.bar(np.arange(len(bin_edges) - 1), freqs, color='r')
     save_path = use_path + add_str + '.png'
     print('Saving ' + save_path)
     plt.savefig(save_path)
+    plt.clf()
+
 
 def kl_test(feat, labels, should_plot=False):
     print('Using KL test to select coeffs')
@@ -194,7 +199,18 @@ def kl_test(feat, labels, should_plot=False):
     # samples per class)
     max_sample_count = np.amax([len(samples) for samples in comps[0].values()])
     # Compute the number of bins to use when constructing the histograms
+
     bin_count = int(np.sqrt(max_sample_count * 9))
+
+    all_data = [sample for comp in comps for samples in comp.values() for sample in
+            samples]
+
+    #min_data = np.amin(all_data)
+    #max_data = np.amax(all_data)
+    #step_size = (max_data - min_data) / bin_count
+
+    #bin_edges = np.arange(min_data, max_data, step_size)
+
     print('There are %i bins' % bin_count)
 
     # Initialize components with to an empty array
@@ -204,9 +220,12 @@ def kl_test(feat, labels, should_plot=False):
     if os.path.exists(base_path):
         shutil.rmtree(base_path)
 
+
+    comp_dists = []
     for i, comp in tqdm(enumerate(comps)):
         all_kl = []
         use_bins = bin_count
+        dists = []
         for c, samples in comp.items():
             # Aggregate samples for every other class
             others = agg_other_samples(comp, c)
@@ -216,16 +235,16 @@ def kl_test(feat, labels, should_plot=False):
             this_dist, bin_edges = np.histogram(samples, bins=bin_count)
             other_dist, _ = np.histogram(others, bins=bin_edges)
 
-            if should_plot:
-                plot_histo_ready(this_dist, bin_edges, i, c, 'this', base_path)
-                plot_histo_ready(other_dist, bin_edges, i, c, 'other', base_path)
-
-            this_dist = normalize_hist(this_dist)
-            other_dist = normalize_hist(other_dist)
+            norm_this_dist = normalize_hist(this_dist)
+            norm_other_dist = normalize_hist(other_dist)
 
             # Compute the KL divergence between the two distributions.
-            kl_div = ch.kl_div(this_dist, other_dist)
+            kl_div = ch.kl_div(norm_this_dist, norm_other_dist)
+
+            dists.append((this_dist, other_dist, bin_edges, i, c, kl_div))
             all_kl.append(kl_div)
+
+        comp_dists.append(dists)
 
         kl_comps[i] = np.amax(all_kl)
 
@@ -233,6 +252,18 @@ def kl_test(feat, labels, should_plot=False):
     arg_sorted = np.argsort(kl_comps)
     arg_sorted = np.flipud(arg_sorted)
     idx = arg_sorted[:TAKE_COUNT]
+
+    dists = np.array(dists)
+    plot_count = 5
+
+    comp_dists = np.array(comp_dists)
+    print('Comp dists len ', len(comp_dists))
+    plot_dists = comp_dists[arg_sorted][:plot_count]
+    if should_plot:
+        for dist in plot_dists:
+            for this_dist, other_dist, bin_edges, i, c, kl_div in dist:
+                plot_histo_ready(this_dist, bin_edges, kl_div, i, c, 'this', base_path)
+                plot_histo_ready(other_dist, bin_edges, kl_div, i, c, 'other', base_path)
 
     return feat[:, idx], idx
 
