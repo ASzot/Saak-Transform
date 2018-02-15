@@ -43,4 +43,7 @@ def bin_samples(samples, classes):
 
 
 def kl_div(a, b):
-    return np.sum(a + np.log(a / b))
+    return np.sum(a * np.log(a / b))
+
+def entropy(a):
+    return -1.0 * np.sum(a * np.log(a))

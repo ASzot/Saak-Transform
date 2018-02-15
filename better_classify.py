@@ -28,7 +28,6 @@ import matplotlib.mlab as mlab
 plt.switch_backend('agg')
 
 
-
 def gcm_test(feat, labels):
     print(feat.shape)
     # Get average for each class.
@@ -143,6 +142,19 @@ def plot_dist_hist(comps, add_path):
             plot_histo(data, comp_i, class_i, np.mean(data), np.std(data), add_path)
 
 
+def plot_entropy_hist(entropies, labels, base_path, comp):
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+
+    plt.title('Component %i' % comp)
+    plt.ylabel('Entropy')
+    plt.xlabel('Class')
+    plt.bar(np.arange(len(entropies)), entropies, color='r')
+
+    plt.savefig(base_path + str(comp) + '.png')
+    plt.clf()
+
+
 def plot_histo_ready(freqs, bin_edges, kl_div, comp, c, add_str, base_path):
     use_path = base_path + str(comp) + '/' + str(c) + '/'
     if not os.path.exists(use_path):
@@ -216,10 +228,9 @@ def kl_test(feat, labels, should_plot=False):
     # Initialize components with to an empty array
     kl_comps = [0.0] * len(comps)
 
-    base_path = 'data/results/compare_hists/'
+    base_path = 'data/results/compare_entropies/'
     if os.path.exists(base_path):
         shutil.rmtree(base_path)
-
 
     comp_dists = []
     for i, comp in tqdm(enumerate(comps)):
@@ -239,7 +250,12 @@ def kl_test(feat, labels, should_plot=False):
             norm_other_dist = normalize_hist(other_dist)
 
             # Compute the KL divergence between the two distributions.
-            kl_div = ch.kl_div(norm_this_dist, norm_other_dist)
+            kl_div_1 = ch.kl_div(norm_this_dist, norm_other_dist)
+            #kl_div_2 = ch.kl_div(norm_other_dist, norm_this_dist)
+
+            kl_div = kl_div_1
+
+            #kl_div = np.abs((kl_div_1 + kl_div_2) / 2.0)
 
             dists.append((this_dist, other_dist, bin_edges, i, c, kl_div))
             all_kl.append(kl_div)
@@ -259,13 +275,103 @@ def kl_test(feat, labels, should_plot=False):
     comp_dists = np.array(comp_dists)
     print('Comp dists len ', len(comp_dists))
     plot_dists = comp_dists[arg_sorted][:plot_count]
-    if should_plot:
-        for dist in plot_dists:
-            for this_dist, other_dist, bin_edges, i, c, kl_div in dist:
-                plot_histo_ready(this_dist, bin_edges, kl_div, i, c, 'this', base_path)
-                plot_histo_ready(other_dist, bin_edges, kl_div, i, c, 'other', base_path)
+
+    #TODO:
+    # I messed up the plotting code and accidently deleted it.
+    # But I know it's in a previous version of the git history.
 
     return feat[:, idx], idx
+
+
+
+def entropy_test(feat, labels, should_plot=False):
+    print('Using entroy test to select coeffs')
+    binned = ch.bin_samples(feat, labels)
+
+    binned_items = [(c, compute_energy(samples.T)) for c, samples in
+            binned.items()]
+    # Binned items is a dictionary where key is the class
+    # and value is the data belonging to the class in the form of
+    # (# channels, # samples)
+
+    comps = []
+    is_first = True
+    for c, energies in binned_items:
+        for i in range(len(energies)):
+            if is_first:
+                comps.append({})
+            comps[i][c] = energies[i]
+
+        is_first = False
+
+    def normalize_hist(dist, eps=1e-4):
+        total = np.sum(dist)
+        dist = np.array(dist)
+        norm = dist / total
+        # Remove any very small values
+        norm[norm < eps] = eps
+        return norm
+
+    # Get the maximum number of samples across each class
+    # (If using the full dataset the max should just be equal to the number of
+    # samples per class)
+    max_sample_count = np.amax([len(samples) for samples in comps[0].values()])
+    # Compute the number of bins to use when constructing the histograms
+
+    bin_count = int(np.sqrt(max_sample_count * 9))
+
+    all_data = [sample for comp in comps for samples in comp.values() for sample in
+            samples]
+
+    print('There are %i bins' % bin_count)
+
+    entropy_comps = [0.0] * len(comps)
+
+    base_path = 'data/results/compare_entropies/'
+    if os.path.exists(base_path):
+        shutil.rmtree(base_path)
+
+    comp_dists = []
+    for i, comp in tqdm(enumerate(comps)):
+        all_entropy = []
+        use_bins = bin_count
+        dists = []
+
+        for c, samples in comp.items():
+            this_dist, bin_edges = np.histogram(samples, bins='auto')
+
+            norm_this_dist = normalize_hist(this_dist)
+
+            entropy = ch.entropy(norm_this_dist)
+
+            dists.append((this_dist, bin_edges, i, c, norm_this_dist))
+            all_entropy.append(entropy)
+
+        comp_dists.append(dists)
+
+        entropy_comps[i] = np.amin(all_entropy)
+
+    TAKE_COUNT = 2000
+    arg_sorted = np.argsort(entropy_comps)
+    arg_sorted = np.flipud(arg_sorted)
+    idx = arg_sorted[:TAKE_COUNT]
+
+    dists = np.array(dists)
+    plot_count = 5
+
+    comp_dists = np.array(comp_dists)
+
+    plot_dists = comp_dists[arg_sorted][:plot_count]
+
+    if should_plot:
+        for comp_i, dist in enumerate(plot_dists):
+            entropies = [entropy for this_dist, bin_edges, i, c, entropy in dist]
+            labels = [c for this_dist, bin_edges, i, c, entropy in dist]
+
+            plot_entropy_hist(entropies, labels, base_path, comp_i)
+
+    return feat[:, idx], idx
+
 
 
 def random_select(data, labels):
@@ -286,7 +392,7 @@ def train_data(data, labels):
     assert final_feat.shape[1] == final_feat_dim
 
     # Remove some of the features with an f-test
-    selected_feat, idx = kl_test(final_feat, labels, True)
+    selected_feat, idx = entropy_test(final_feat, labels, False)
     #selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
     print(selected_feat.shape)
 
