@@ -146,7 +146,7 @@ def plot_entropy_hist(entropies, labels, base_path, comp):
     if not os.path.exists(base_path):
         os.makedirs(base_path)
 
-    plt.title('Component %i' % comp)
+    plt.title('Component %i Min is %.4f' % (comp, np.amin(entropies)))
     plt.ylabel('Entropy')
     plt.xlabel('Class')
     plt.bar(np.arange(len(entropies)), entropies, color='r')
@@ -329,6 +329,7 @@ def entropy_test(feat, labels, should_plot=False):
 
     base_path = 'data/results/compare_entropies/'
     if os.path.exists(base_path):
+        print('Removing existing results')
         shutil.rmtree(base_path)
 
     comp_dists = []
@@ -344,34 +345,44 @@ def entropy_test(feat, labels, should_plot=False):
 
             entropy = ch.entropy(norm_this_dist)
 
-            dists.append((this_dist, bin_edges, i, c, norm_this_dist))
+            dists.append((this_dist, bin_edges, i, c, entropy))
             all_entropy.append(entropy)
 
         comp_dists.append(dists)
 
         entropy_comps[i] = np.amin(all_entropy)
 
+    print('Selecting top coeffs')
     TAKE_COUNT = 2000
+    # We want to go from smallest to largest
     arg_sorted = np.argsort(entropy_comps)
-    arg_sorted = np.flipud(arg_sorted)
     idx = arg_sorted[:TAKE_COUNT]
+    print('Selected')
 
     dists = np.array(dists)
-    plot_count = 5
+    plot_count = 10
 
     comp_dists = np.array(comp_dists)
 
-    plot_dists = comp_dists[arg_sorted][:plot_count]
+    top_plot_dists = comp_dists[arg_sorted][:plot_count]
+    bottom_plot_dists = comp_dists[arg_sorted][-plot_count:]
 
-    if should_plot:
-        for comp_i, dist in enumerate(plot_dists):
+    def plot_all(plot_dists, add_path):
+        for dist in plot_dists:
             entropies = [entropy for this_dist, bin_edges, i, c, entropy in dist]
             labels = [c for this_dist, bin_edges, i, c, entropy in dist]
 
-            plot_entropy_hist(entropies, labels, base_path, comp_i)
+            comp_i = dist[0][2]
+
+            plot_entropy_hist(entropies, labels, base_path + add_path + '/', comp_i)
+
+    if should_plot:
+        print('Plotting')
+
+        plot_all(top_plot_dists, 'top')
+        plot_all(bottom_plot_dists, 'bottom')
 
     return feat[:, idx], idx
-
 
 
 def random_select(data, labels):
@@ -392,7 +403,7 @@ def train_data(data, labels):
     assert final_feat.shape[1] == final_feat_dim
 
     # Remove some of the features with an f-test
-    selected_feat, idx = entropy_test(final_feat, labels, False)
+    selected_feat, idx = entropy_test(final_feat, labels, True)
     #selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
     print(selected_feat.shape)
 
