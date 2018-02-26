@@ -352,8 +352,8 @@ def entropy_test(feat, labels, should_plot=False):
 
         entropy_comps[i] = np.amin(all_entropy)
 
-    print('Selecting top coeffs')
-    TAKE_COUNT = 2000
+    TAKE_COUNT = 1000
+    print('Selecting %i top coeffs' % (TAKE_COUNT))
     # We want to go from smallest to largest
     arg_sorted = np.argsort(entropy_comps)
     idx = arg_sorted[:TAKE_COUNT]

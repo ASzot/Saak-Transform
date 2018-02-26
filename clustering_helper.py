@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import stats
 
 # [cluster index] -> [Frequencies of real labels associated with that cluster]
 def bin_labels(labels, pred_labels):
@@ -46,4 +47,4 @@ def kl_div(a, b):
     return np.sum(a * np.log(a / b))
 
 def entropy(a):
-    return -1.0 * np.sum(a * np.log(a))
+    return stats.entropy(a)
