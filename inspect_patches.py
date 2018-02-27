@@ -49,7 +49,7 @@ def extract_patches(feat, stride_w, stride_h, patch_width, patch_height):
 
 def find_least_entropy_patches(patches, class_i):
     TAKE_COUNT = 10
-    entropies = [ch.entropy(patch) for patch in patches]
+    entropies = [stats.entropy(patch) for patch in patches]
 
     sorted_indices = np.argsort(entropies)
 
@@ -84,6 +84,11 @@ def draw_heat_map(selected_indices, class_i, stride_h, stride_w, patch_width,
 
 
 def patch_method(feat, labels):
+    base_path = 'data/results/patches/'
+    if os.path.exists(base_path):
+        shutil.rmtree(base_path)
+    os.makedirs(base_path)
+
     # Important Notes
     # - Flattening the number of samples, color channel, width, height
 
