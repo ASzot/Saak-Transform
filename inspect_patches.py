@@ -31,7 +31,6 @@ plt.switch_backend('agg')
 def extract_patches(feat, stride_w, stride_h, patch_width, patch_height):
     _, _, img_width, img_height = feat.shape
 
-
     end_h = patch_height
 
     patches = []
@@ -48,13 +47,20 @@ def extract_patches(feat, stride_w, stride_h, patch_width, patch_height):
     return np.array(patches)
 
 
-def find_least_entropy_patches(patches):
+def find_least_entropy_patches(patches, class_i):
     TAKE_COUNT = 10
     entropies = [ch.entropy(patch) for patch in patches]
 
     sorted_indices = np.argsort(entropies)
 
+    entropies = np.array(entropies)
+
+    print('Class %i' % class_i)
+    print(stats.describe(entropies))
+    print('')
+
     return sorted_indices[:TAKE_COUNT]
+
 
 def draw_heat_map(selected_indices, class_i, stride_h, stride_w, patch_width,
         patch_height, img_width, img_height):
@@ -71,9 +77,8 @@ def draw_heat_map(selected_indices, class_i, stride_h, stride_w, patch_width,
         total[width_index:width_index+patch_width,
                 height_index:height_index+patch_height] = 1.0
 
-
     plt.imshow(total, cmap='hot')
-    plt.savefig('data/results/patches' + str(class_i) + '.png')
+    plt.savefig('data/results/patches/' + str(class_i) + '.png')
     plt.clf()
 
 
@@ -99,11 +104,10 @@ def patch_method(feat, labels):
         class_patches = binned[class_label]
         class_patches = class_patches.reshape(patch_count, -1)
 
-        selected_indices = find_least_entropy_patches(class_patches)
+        selected_indices = find_least_entropy_patches(class_patches,
+                class_label)
         draw_heat_map(selected_indices, class_label, stride_h, stride_w, patch_width,
                 patch_height, W, H)
-
-    raise ValueError()
 
 
 
@@ -117,34 +121,6 @@ def main():
     data, labels = create_numpy_dataset(NUM_IMAGES_TRAIN, train_loader)
 
     patch_method(data, labels)
-
-    clf, filters, means, final_feat_dim, idx, pca = train_data(data, labels)
-
-    print('\n-----------------start testing-------------\n')
-
-    def create_test_dataset():
-        #NUM_IMAGES_TEST = 500
-        NUM_IMAGES_TEST = None
-        test_data, test_labels = create_numpy_dataset(NUM_IMAGES_TEST, test_loader)
-        test_outputs = saak.test_multi_stage_saak_trans(test_data, means, filters)
-        test_final_feat = saak.get_final_feature(test_outputs)
-        return test_final_feat, test_labels
-
-    test_final_feat, test_labels = create_test_dataset()
-    #test_final_feat, test_labels = rt.cached_action(create_test_dataset, 'data/transformed/', ['data', 'labels'])
-
-    assert test_final_feat.shape[1] == final_feat_dim
-
-    # Select only the features as determined by the original f-score feature
-    # selection.
-    test_selected_feat = test_final_feat[:, idx]
-    test_reduced_feat = pca.transform(test_selected_feat)
-    print('testing reducued feat shape {}'.format(test_reduced_feat.shape))
-
-    test_pred = clf.predict(test_reduced_feat)
-
-    test_acc = sklearn.metrics.accuracy_score(test_labels, test_pred)
-    print('testing acc is {}'.format(test_acc))
 
 
 if __name__ == '__main__':
