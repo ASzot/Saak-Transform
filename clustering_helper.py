@@ -1,6 +1,15 @@
 import numpy as np
 from scipy import stats
 
+
+def bin_entropies(binned_samples):
+    entropies = []
+    for k in binned_samples:
+        flat = binned_samples[k].flatten()
+        entropies.append(stats.entropy(flat))
+
+    return entropies
+
 # [cluster index] -> [Frequencies of real labels associated with that cluster]
 def bin_labels(labels, pred_labels):
     freqs = {}
@@ -12,6 +21,23 @@ def bin_labels(labels, pred_labels):
         freqs[pred_label][label] += 1
 
     return freqs
+
+
+# [cluster index] -> {label: prob 0.0 -1.0, ...}
+def convert_bins_to_probs(bins):
+    probs = {}
+    totals = []
+    for b in bins:
+        total_val = sum(bins[b].values())
+        totals.append(total_val)
+        for i in bins[b]:
+            bins[b][i] = (bins[b][i] / total_val)
+
+        sorted_bin = sorted(bins[b].items(), key=lambda x: x[1], reverse=True)
+        bins[b] = sorted_bin
+
+    return bins, totals
+
 
 def convert_bins_to_pcts(bins):
     total_vals = {}
@@ -29,7 +55,7 @@ def convert_bins_to_pcts(bins):
     return bins, total_vals
 
 
-
+# [class] -> [sample0, sample1, ...]
 def bin_samples(samples, classes):
     bins = {}
     for sample, c in zip(samples, classes):
@@ -41,6 +67,22 @@ def bin_samples(samples, classes):
         bins[k] = np.array(bins[k])
 
     return bins
+
+def bin_samples_labels(samples, classes, real_labels):
+    bins = {}
+    for sample, c, real_label in zip(samples, classes, real_labels):
+        if c not in bins:
+            bins[c] = []
+        bins[c].append((sample, real_label))
+
+    for k in bins:
+        samples = [b[0] for b in bins[k]]
+        labels = [b[1] for b in bins[k]]
+        bins[k] = (np.array(samples), np.array(labels))
+
+    return bins
+
+
 
 
 def kl_div(a, b):

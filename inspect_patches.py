@@ -8,6 +8,7 @@ from scipy import stats
 
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import f_classif
+from sklearn.cluster import MiniBatchKMeans
 from sklearn import svm
 import sklearn
 
@@ -28,6 +29,7 @@ import matplotlib.mlab as mlab
 plt.switch_backend('agg')
 
 
+# feat: [N, C, W, H] array where N is # of samples, C color component.
 def extract_patches(feat, stride_w, stride_h, patch_width, patch_height):
     _, _, img_width, img_height = feat.shape
 
@@ -45,7 +47,6 @@ def extract_patches(feat, stride_w, stride_h, patch_width, patch_height):
         end_h += stride_h
 
     return np.array(patches)
-
 
 def find_least_entropy_patches(patches, class_i):
     TAKE_COUNT = 10
@@ -82,6 +83,32 @@ def draw_heat_map(selected_indices, class_i, stride_h, stride_w, patch_width,
     plt.clf()
 
 
+"""
+patches: [patch count, N, C, patch width, patch height
+
+Returns:
+    The flattened version of the patches where now the each element corresponds
+    to a single patch sample [C, patch W, patch H] in flattened form. The
+    labels have also been extended to be the class label for each of the
+    patches
+"""
+def get_labels_for_patches(patches, labels):
+    patch_count, N, C, patch_width, patch_height = patches.shape
+
+    patches = patches.reshape(N, patch_count, C, patch_width, patch_height)
+
+    patch_labels = []
+    for label in labels:
+        patch_labels.extend([label for i in range(patch_count)])
+
+    patch_data = patches.reshape(N, patch_count, C * patch_width * patch_height)
+    patch_data = patch_data.reshape(N * patch_count, C * patch_width *
+            patch_height)
+
+    patch_data, patch_labels = sklearn.utils.shuffle(patch_data, patch_labels)
+
+    return patch_data, patch_labels
+
 
 def patch_method(feat, labels):
     base_path = 'data/results/patches/'
@@ -97,23 +124,62 @@ def patch_method(feat, labels):
     patch_width = 8
     patch_height = 8
 
-    N, C, W, H = feat.shape
-
     patches = extract_patches(feat, stride_h, stride_w, patch_width, patch_height)
-    patch_count = patches.shape[0]
-    patches = patches.reshape(N, patch_count, C, patch_width, patch_height)
 
-    binned = ch.bin_samples(patches, labels)
+    patch_data, patch_labels = get_labels_for_patches()
 
-    for class_label in binned:
-        class_patches = binned[class_label]
-        class_patches = class_patches.reshape(patch_count, -1)
+    base_path = 'data/results/patch_clusters/'
+    print('Deleting everything in ' + base_path)
+    if os.path.exists(base_path):
+        shutil.rmtree(base_path)
+    os.makedirs(base_path)
 
-        selected_indices = find_least_entropy_patches(class_patches,
-                class_label)
-        draw_heat_map(selected_indices, class_label, stride_h, stride_w, patch_width,
-                patch_height, W, H)
+    for cluster_count in [512, 1024]:
+        print('Fitting MBK')
+        mbk = MiniBatchKMeans(n_clusters=cluster_count, init='k-means++')
+        print('Done fitting MBK')
+        preds = mbk.fit_predict(patch_data)
+        binned_labels = ch.bin_labels(patch_labels, preds)
+        bin_probs, totals = ch.convert_bins_to_probs(binned_labels)
 
+        binned_samples = ch.bin_samples(patch_data, preds)
+        entropies = ch.bin_entropies(binned_samples)
+
+        max_probs = []
+        colors = []
+        color_map = {
+                0: 'b',
+                1: 'g',
+                2: 'r',
+                3: 'c',
+                4: 'm',
+                5: 'y',
+                6: 'k',
+                7: 'w',
+                8: 'pink',
+                9: 'saddlebrown',
+            }
+        for b in bin_probs:
+            max_prob_ele = bin_probs[b][0]
+            max_probs.append(max_prob_ele[1])
+            colors.append(color_map[max_prob_ele[0]])
+
+        plt.title('Max Class Probability per Cluster (%i)' % cluster_count)
+        plt.bar(np.arange(len(max_probs)), max_probs, color=colors)
+        plt.savefig(base_path + 'patch_cluster_hist%i.png' % cluster_count)
+        plt.clf()
+
+        plt.title('Entropies per Cluster (%i)' % cluster_count)
+        plt.bar(np.arange(len(entropies)), entropies)
+        plt.savefig(base_path + 'patch_entropies%i.png' %
+                cluster_count)
+        plt.clf()
+
+        plt.title('Count per patch (%i)' % cluster_count)
+        plt.bar(np.arange(len(totals)), totals)
+        plt.savefig(base_path + 'patch_counts%i.png' % cluster_count)
+        plt.clf()
+        print('Saved all!')
 
 
 def main():
@@ -121,8 +187,8 @@ def main():
 
     train_loader, test_loader = get_data_loaders()
 
-    NUM_IMAGES_TRAIN = 2000
-    #NUM_IMAGES_TRAIN = None
+    #NUM_IMAGES_TRAIN = 2000
+    NUM_IMAGES_TRAIN = 10000
     data, labels = create_numpy_dataset(NUM_IMAGES_TRAIN, train_loader)
 
     patch_method(data, labels)

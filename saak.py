@@ -107,9 +107,9 @@ def PCA_and_augment(data_in, energy_thresh=1.0):
 @ depth: determine shape, initial: 0
 '''
 
-def fit_pca_shape(datasets,depth):
+def fit_pca_shape(datasets,depth, start_dim = 32):
     factor=np.power(2,depth)
-    length=int(32/factor)
+    length=int(start_dim/factor)
     PrintHelper.print('fit_pca_shape: length: {}'.format(length))
     idx1=range(0,length,2)
     idx2=[i+2 for i in idx1]
@@ -187,14 +187,15 @@ def conv(filters,datasets,stride=2):
 @ One-stage Saak transform
 @ input: datasets [60000, channel, size,size]
 '''
-def one_stage_saak_trans(datasets=None, stage=0, energy_thresh=1.0):
+def one_stage_saak_trans(datasets=None, stage=0, energy_thresh=1.0,
+        start_dim=32):
     # load dataset, (60000,1,32,32)
     # input_channel: 1->7
     PrintHelper.print('one_stage_saak_trans: datasets.shape {}'.format(datasets.shape))
     input_channels=datasets.shape[1]
 
     # change data shape, (14*60000,4)
-    data_flatten=fit_pca_shape(datasets,stage)
+    data_flatten=fit_pca_shape(datasets,stage, start_dim)
 
     # augmented components
     comps_complete, feat_mean = PCA_and_augment(data_flatten, energy_thresh=energy_thresh)
@@ -284,7 +285,8 @@ def multi_stage_saak_trans(data, energy_thresh=1.0):
 
     for i in range(num_stages):
         PrintHelper.print('{} stage of saak transform: '.format(i))
-        filt,mean,data=one_stage_saak_trans(data, stage=i, energy_thresh=energy_thresh)
+        filt,mean,data=one_stage_saak_trans(data, stage=i,
+                energy_thresh=energy_thresh, start_dim=spatial_extent)
         filters.append(filt)
         outputs.append(data)
         means.append(mean)

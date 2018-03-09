@@ -25,6 +25,8 @@ from inv_final_dist import compute_energy
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 
+from saak import PrintHelper
+
 plt.switch_backend('agg')
 
 
@@ -285,7 +287,8 @@ def kl_test(feat, labels, should_plot=False):
 
 
 def entropy_test(feat, labels, should_plot=False):
-    print('Using entroy test to select coeffs')
+    PrintHelper.print('Using entroy test to select coeffs')
+    PrintHelper.print(np.array(labels).shape)
     binned = ch.bin_samples(feat, labels)
 
     binned_items = [(c, compute_energy(samples.T)) for c, samples in
@@ -323,14 +326,15 @@ def entropy_test(feat, labels, should_plot=False):
     all_data = [sample for comp in comps for samples in comp.values() for sample in
             samples]
 
-    print('There are %i bins' % bin_count)
+    PrintHelper.print('There are %i bins' % bin_count)
 
     entropy_comps = [0.0] * len(comps)
 
-    base_path = 'data/results/compare_entropies/'
-    if os.path.exists(base_path):
-        print('Removing existing results')
-        shutil.rmtree(base_path)
+    if should_plot:
+        base_path = 'data/results/compare_entropies/'
+        if os.path.exists(base_path):
+            print('Removing existing results')
+            shutil.rmtree(base_path)
 
     comp_dists = []
     for i, comp in tqdm(enumerate(comps)):
@@ -353,11 +357,11 @@ def entropy_test(feat, labels, should_plot=False):
         entropy_comps[i] = np.amin(all_entropy)
 
     TAKE_COUNT = 1000
-    print('Selecting %i top coeffs' % (TAKE_COUNT))
+    PrintHelper.print('Selecting %i top coeffs' % (TAKE_COUNT))
     # We want to go from smallest to largest
     arg_sorted = np.argsort(entropy_comps)
     idx = arg_sorted[:TAKE_COUNT]
-    print('Selected')
+    PrintHelper.print('Selected')
 
     dists = np.array(dists)
     plot_count = 10
@@ -392,20 +396,20 @@ def random_select(data, labels):
     return data[:, idx], idx
 
 
-def train_data(data, labels):
-    data = data.reshape(-1, 3, 32, 32)
+def train_data(data, labels, plot=False, C=3, W=32, H=32):
+    data = data.reshape(-1, C, W, H)
+    PrintHelper.print('Incoming data shape is %s' % str(data.shape))
     filters, means, outputs = saak.multi_stage_saak_trans(data, energy_thresh=0.97)
     final_feat_dim = sum(
         [((output.shape[1] - 1) / 2 + 1) * output.shape[2] * output.shape[3] for output in outputs])
     # This is the dimensionality of each datapoint.
     final_feat = saak.get_final_feature(outputs)
-    print('final feature dimension is {}'.format(final_feat.shape[1]))
+    #print('final feature dimension is {}'.format(final_feat.shape[1]))
     assert final_feat.shape[1] == final_feat_dim
 
     # Remove some of the features with an f-test
-    selected_feat, idx = entropy_test(final_feat, labels, True)
+    selected_feat, idx = entropy_test(final_feat, labels, plot)
     #selected_feat, idx = f_test(final_feat, labels, thresh=0.75)
-    print(selected_feat.shape)
 
     reduced_feat, pca = reduce_feat_dim(selected_feat, dim=248)
 
